@@ -1226,7 +1226,7 @@ class TestSamplePriorPredictive(SeededTest):
             b = pm.Binomial("b", n=1, p=a, size=10)
 
         b_sampler = compile_pymc([], b, mode="FAST_RUN", random_seed=232093)
-        avg = np.stack([b_sampler() for i in range(10000)]).mean(0)
+        avg = np.stack([b_sampler() for _ in range(10000)]).mean(0)
         npt.assert_array_almost_equal(avg, 0.5 * np.ones((10,)), decimal=2)
 
     def test_transformed(self):
@@ -1749,8 +1749,8 @@ class TestCompileForwardSampler:
             vars_in_trace=[mu],
             basic_rvs=model.basic_RVs,
         )
-        assert {i.name for i in self.get_function_inputs(f)} == set()
-        assert {i.name for i in self.get_function_roots(f)} == set()
+        assert not {i.name for i in self.get_function_inputs(f)}
+        assert not {i.name for i in self.get_function_roots(f)}
 
     def test_lkj_cholesky_cov(self):
         with pm.Model() as model:
@@ -1784,8 +1784,8 @@ class TestCompileForwardSampler:
             vars_in_trace=[chol],
             basic_rvs=model.basic_RVs,
         )
-        assert {i.name for i in self.get_function_inputs(f)} == set()
-        assert {i.name for i in self.get_function_roots(f)} == set()
+        assert not {i.name for i in self.get_function_inputs(f)}
+        assert not {i.name for i in self.get_function_roots(f)}
 
 
 def test_get_seeds_per_chain():
@@ -1799,7 +1799,7 @@ def test_get_seeds_per_chain():
     assert ret == (5,)
 
     ret = _get_seeds_per_chain(5, chains=3)
-    assert len(ret) == 3 and isinstance(ret[0], int) and not any(r == 5 for r in ret)
+    assert len(ret) == 3 and isinstance(ret[0], int) and all(r != 5 for r in ret)
 
     rng = np.random.default_rng(123)
     expected_ret = rng.integers(2**30, dtype=np.int64, size=1)

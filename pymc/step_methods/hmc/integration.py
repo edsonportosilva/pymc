@@ -42,7 +42,7 @@ class CpuLeapfrogIntegrator:
     def compute_state(self, q, p):
         """Compute Hamiltonian functions using a position and momentum."""
         if q.data.dtype != self._dtype or p.data.dtype != self._dtype:
-            raise ValueError("Invalid dtype. Must be %s" % self._dtype)
+            raise ValueError(f"Invalid dtype. Must be {self._dtype}")
 
         logp, dlogp = self._logp_dlogp_func(q)
 
@@ -77,11 +77,10 @@ class CpuLeapfrogIntegrator:
         except ValueError as err:
             # Raised by many scipy.linalg functions
             scipy_msg = "array must not contain infs or nans"
-            if len(err.args) > 0 and scipy_msg in err.args[0].lower():
-                msg = "Infs or nans in scipy.linalg during leapfrog step."
-                raise IntegrationError(msg)
-            else:
+            if len(err.args) <= 0 or scipy_msg not in err.args[0].lower():
                 raise
+            msg = "Infs or nans in scipy.linalg during leapfrog step."
+            raise IntegrationError(msg)
 
     def _step(self, epsilon, state):
         axpy = linalg.blas.get_blas_funcs("axpy", dtype=self._dtype)

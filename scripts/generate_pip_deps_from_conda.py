@@ -85,10 +85,7 @@ def conda_package_to_pip(package):
     if package in EXCLUDE:
         return
 
-    if package in RENAME:
-        return RENAME[package]
-
-    return package
+    return RENAME[package] if package in RENAME else package
 
 
 def main(conda_fname, pip_fname):
@@ -118,8 +115,7 @@ def main(conda_fname, pip_fname):
     pip_deps = []
     for dep in deps:
         if isinstance(dep, str):
-            conda_dep = conda_package_to_pip(dep)
-            if conda_dep:
+            if conda_dep := conda_package_to_pip(dep):
                 pip_deps.append(conda_dep)
         elif isinstance(dep, dict) and len(dep) == 1 and "pip" in dep:
             pip_deps += dep["pip"]

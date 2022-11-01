@@ -158,9 +158,9 @@ def find_MAP(
         if isinstance(e, StopIteration):
             pm._log.info(e)
     finally:
-        last_v = cost_func.n_eval
         if progressbar:
             assert isinstance(cost_func.progress, ProgressBar)
+            last_v = cost_func.n_eval
             cost_func.progress.total = last_v
             cost_func.progress.update(last_v)
             print(file=sys.stdout)
@@ -172,10 +172,7 @@ def find_MAP(
     )
     mx = {var.name: value for var, value in zip(unobserved_vars, unobserved_vars_values)}
 
-    if return_raw:
-        return mx, opt_result
-    else:
-        return mx
+    return (mx, opt_result) if return_raw else mx
 
 
 def allfinite(x):
@@ -183,10 +180,9 @@ def allfinite(x):
 
 
 def allinmodel(vars, model):
-    notin = [v for v in vars if v not in model.value_vars]
-    if notin:
+    if notin := [v for v in vars if v not in model.value_vars]:
         notin = list(map(get_var_name, notin))
-        raise ValueError("Some variables not in the model: " + str(notin))
+        raise ValueError(f"Some variables not in the model: {notin}")
 
 
 class CostFuncWrapper:
@@ -234,10 +230,7 @@ class CostFuncWrapper:
             assert isinstance(self.progress, ProgressBar)
             self.progress.update_bar(self.n_eval)
 
-        if self.use_gradient:
-            return value, grad
-        else:
-            return value
+        return (value, grad) if self.use_gradient else value
 
     def update_progress_desc(self, neg_value: float, grad: np.float64 = None) -> None:
         if self.progressbar:

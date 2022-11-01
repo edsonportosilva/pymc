@@ -433,7 +433,6 @@ class TestData(SeededTest):
             with pytest.warns(UserWarning, match="`mutable` kwarg was not specified"):
                 data = pm.Data("x", [1, 2, 3])
             assert isinstance(data, TensorConstant)
-        pass
 
 
 def test_data_naming():

@@ -127,7 +127,7 @@ class GaussianRandomWalkRV(RandomVariable):
 
     def make_node(self, rng, size, dtype, mu, sigma, init_dist, steps):
         steps = at.as_tensor_variable(steps)
-        if not steps.ndim == 0 or not steps.dtype.startswith("int"):
+        if steps.ndim != 0 or not steps.dtype.startswith("int"):
             raise ValueError("steps must be an integer scalar (ndim=0).")
 
         mu = at.as_tensor_variable(mu)
@@ -138,8 +138,11 @@ class GaussianRandomWalkRV(RandomVariable):
         size = normalize_size_param(size)
         # If not explicit, size is determined by the shapes of mu, sigma, and init
         init_dist_size = (
-            size if not rv_size_is_none(size) else at.broadcast_shape(mu, sigma, init_dist)
+            at.broadcast_shape(mu, sigma, init_dist)
+            if rv_size_is_none(size)
+            else size
         )
+
         init_dist = change_rv_size(init_dist, init_dist_size)
 
         return super().make_node(rng, size, dtype, mu, sigma, init_dist, steps)
@@ -200,11 +203,10 @@ class GaussianRandomWalkRV(RandomVariable):
                 np.asarray(sigma).shape,
                 np.asarray(init_dist).shape,
             )
-            dist_shape = (*bcast_shape, int(steps))
+            dist_shape = *bcast_shape, steps
 
-        # If size is None then the returned series should be (*size, 1+steps)
         else:
-            dist_shape = (*size, int(steps))
+            dist_shape = *size, steps
 
         # Add one dimension to the right, so that mu and sigma broadcast safely along
         # the steps dimension
@@ -278,43 +280,37 @@ class GaussianRandomWalk(distribution.Continuous):
                 UserWarning,
             )
             init_dist = Normal.dist(0, 100)
-        else:
-            if not (
+        elif (
                 isinstance(init_dist, at.TensorVariable)
                 and init_dist.owner is not None
                 and isinstance(init_dist.owner.op, RandomVariable)
                 and init_dist.owner.op.ndim_supp == 0
             ):
-                raise TypeError("init must be a univariate distribution variable")
             check_dist_not_registered(init_dist)
 
+        else:
+            raise TypeError("init must be a univariate distribution variable")
         # Ignores logprob of init var because that's accounted for in the logp method
         init_dist = ignore_logprob(init_dist)
 
         return super().dist([mu, sigma, init_dist, steps], **kwargs)
 
-    def moment(rv, size, mu, sigma, init_dist, steps):
-        grw_moment = at.zeros_like(rv)
+    def moment(self, size, mu, sigma, init_dist, steps):
+        grw_moment = at.zeros_like(self)
         grw_moment = at.set_subtensor(grw_moment[..., 0], moment(init_dist))
         # Add one dimension to the right, so that mu broadcasts safely along the steps
         # dimension
         grw_moment = at.set_subtensor(grw_moment[..., 1:], mu[..., None])
         return at.cumsum(grw_moment, axis=-1)
 
-    def logp(
-        value: at.Variable,
-        mu: at.Variable,
-        sigma: at.Variable,
-        init_dist: at.Variable,
-        steps: at.Variable,
-    ) -> at.TensorVariable:
+    def logp(self, mu: at.Variable, sigma: at.Variable, init_dist: at.Variable, steps: at.Variable) -> at.TensorVariable:
         """Calculate log-probability of Gaussian Random Walk distribution at specified value."""
 
         # Calculate initialization logp
-        init_logp = logp(init_dist, value[..., 0])
+        init_logp = logp(init_dist, self[..., 0])
 
         # Make time series stationary around the mean value
-        stationary_series = value[..., 1:] - value[..., :-1]
+        stationary_series = self[..., 1:] - self[..., :-1]
         # Add one dimension to the right, so that mu and sigma broadcast safely along
         # the steps dimension
         series_logp = logp(Normal.dist(mu[..., None], sigma[..., None]), stationary_series)
@@ -456,7 +452,6 @@ class AR(SymbolicDistribution):
                     f"Init dist must be a distribution created via the `.dist()` API, "
                     f"got {type(init_dist)}"
                 )
-                check_dist_not_registered(init_dist)
             if init_dist.owner.op.ndim_supp > 1:
                 raise ValueError(
                     "Init distribution must have a scalar or vector support dimension, ",

@@ -97,7 +97,7 @@ def test_cartesian_2d():
 def test_kron_dot():
     np.random.seed(1)
     # Create random matrices
-    Ks = [np.random.rand(3, 3) for i in range(3)]
+    Ks = [np.random.rand(3, 3) for _ in range(3)]
     # Create random vector with correct shape
     tot_size = np.prod([k.shape[1] for k in Ks])
     x = np.random.rand(tot_size).reshape((tot_size, 1))
@@ -112,7 +112,7 @@ def test_kron_dot():
 def test_kron_solve_lower():
     np.random.seed(1)
     # Create random matrices
-    Ls = [np.tril(np.random.rand(3, 3)) for i in range(3)]
+    Ls = [np.tril(np.random.rand(3, 3)) for _ in range(3)]
     # Create random vector with correct shape
     tot_size = np.prod([L.shape[1] for L in Ls])
     x = np.random.rand(tot_size).reshape((tot_size, 1))

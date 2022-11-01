@@ -115,7 +115,7 @@ class TestSMC(SeededTest):
         n = 10
         rng = self.get_random_state()
         z_true = np.zeros(n, dtype=int)
-        z_true[int(n / 2) :] = 1
+        z_true[n // 2:] = 1
         y = st.norm(np.array([-1, 1])[z_true], 0.25).rvs(random_state=rng)
 
         with pm.Model() as m:

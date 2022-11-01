@@ -155,8 +155,8 @@ class TestSensitivityInitialCondition:
         # Vector ODE 2 Param with return type at.TensorVariable
         def ode_func_4_t(y, t, p):
             # Make sure that ds and di are vectors by slicing
-            ds = -p[0:1] * y[0:1] * y[1:]
-            di = p[0:1] * y[0:1] * y[1:] - p[1:] * y[1:]
+            ds = -p[:1] * y[:1] * y[1:]
+            di = p[:1] * y[:1] * y[1:] - p[1:] * y[1:]
 
             return at.concatenate([ds, di], axis=0)
 

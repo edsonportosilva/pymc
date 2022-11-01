@@ -11,7 +11,10 @@ from pymc.sampling import RandomSeed, _get_seeds_per_chain, _init_jitter
 
 xla_flags = os.getenv("XLA_FLAGS", "")
 xla_flags = re.sub(r"--xla_force_host_platform_device_count=.+\s", "", xla_flags).split()
-os.environ["XLA_FLAGS"] = " ".join([f"--xla_force_host_platform_device_count={100}"] + xla_flags)
+os.environ["XLA_FLAGS"] = " ".join(
+    ['--xla_force_host_platform_device_count=100'] + xla_flags
+)
+
 
 from datetime import datetime
 
@@ -70,8 +73,7 @@ def _replace_shared_variables(graph: List[TensorVariable]) -> List[TensorVariabl
 
     replacements = {var: at.constant(var.get_value(borrow=True)) for var in shared_variables}
 
-    new_graph = clone_replace(graph, replace=replacements)
-    return new_graph
+    return clone_replace(graph, replace=replacements)
 
 
 def get_jaxified_graph(
@@ -179,9 +181,9 @@ def _update_coords_and_dims(
 ) -> None:
     """Update 'coords' and 'dims' dicts with values in 'idata_kwargs'."""
     if "coords" in idata_kwargs:
-        coords.update(idata_kwargs.pop("coords"))
+        coords |= idata_kwargs.pop("coords")
     if "dims" in idata_kwargs:
-        dims.update(idata_kwargs.pop("dims"))
+        dims |= idata_kwargs.pop("dims")
 
 
 @partial(jax.jit, static_argnums=(2, 3, 4, 5, 6))
@@ -368,11 +370,7 @@ def sample_blackjax_nuts(
     tic4 = datetime.now()
     print("Transformation time = ", tic4 - tic3, file=sys.stdout)
 
-    if idata_kwargs is None:
-        idata_kwargs = {}
-    else:
-        idata_kwargs = idata_kwargs.copy()
-
+    idata_kwargs = {} if idata_kwargs is None else idata_kwargs.copy()
     if idata_kwargs.pop("log_likelihood", bool(model.observed_RVs)):
         tic5 = datetime.now()
         print("Computing Log Likelihood...", file=sys.stdout)
@@ -402,9 +400,7 @@ def sample_blackjax_nuts(
         dims=dims,
         attrs=make_attrs(attrs, library=blackjax),
     )
-    az_trace = to_trace(posterior=posterior, **idata_kwargs)
-
-    return az_trace
+    return to_trace(posterior=posterior, **idata_kwargs)
 
 
 def _numpyro_nuts_defaults() -> Dict[str, Any]:
@@ -592,11 +588,7 @@ def sample_numpyro_nuts(
     tic4 = datetime.now()
     print("Transformation time = ", tic4 - tic3, file=sys.stdout)
 
-    if idata_kwargs is None:
-        idata_kwargs = {}
-    else:
-        idata_kwargs = idata_kwargs.copy()
-
+    idata_kwargs = {} if idata_kwargs is None else idata_kwargs.copy()
     if idata_kwargs.pop("log_likelihood", bool(model.observed_RVs)):
         tic5 = datetime.now()
         print("Computing Log Likelihood...", file=sys.stdout)
@@ -627,5 +619,4 @@ def sample_numpyro_nuts(
         dims=dims,
         attrs=make_attrs(attrs, library=numpyro),
     )
-    az_trace = to_trace(posterior=posterior, **idata_kwargs)
-    return az_trace
+    return to_trace(posterior=posterior, **idata_kwargs)

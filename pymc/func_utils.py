@@ -145,7 +145,7 @@ def find_constrained_prior(
     }
 
     if fixed_params is not None:
-        params_to_optim.update(fixed_params)
+        params_to_optim |= fixed_params
 
     dist = distribution.dist(**params_to_optim)
 
@@ -189,9 +189,7 @@ def find_constrained_prior(
         )
 
     # save optimal parameters
-    opt_params = {
-        param_name: param_value for param_name, param_value in zip(init_guess.keys(), opt.x)
-    }
+    opt_params = dict(zip(init_guess.keys(), opt.x))
     if fixed_params is not None:
-        opt_params.update(fixed_params)
+        opt_params |= fixed_params
     return opt_params

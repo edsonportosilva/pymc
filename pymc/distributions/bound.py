@@ -51,7 +51,7 @@ class _ContinuousBounded(BoundedContinuous):
     rv_op = boundrv
     bound_args_indices = [4, 5]
 
-    def logp(value, distribution, lower, upper):
+    def logp(self, distribution, lower, upper):
         """
         Calculate log-probability of Bounded distribution at specified value.
 
@@ -71,10 +71,11 @@ class _ContinuousBounded(BoundedContinuous):
         TensorVariable
         """
         res = at.switch(
-            at.or_(at.lt(value, lower), at.gt(value, upper)),
+            at.or_(at.lt(self, lower), at.gt(self, upper)),
             -np.inf,
-            logp(distribution, value),
+            logp(distribution, self),
         )
+
 
         return check_parameters(
             res,
@@ -105,7 +106,7 @@ class _DiscreteBounded(Discrete):
             raise ValueError("Cannot transform discrete variable.")
         return super().__new__(cls, *args, **kwargs)
 
-    def logp(value, distribution, lower, upper):
+    def logp(self, distribution, lower, upper):
         """
         Calculate log-probability of Bounded distribution at specified value.
 
@@ -125,10 +126,11 @@ class _DiscreteBounded(Discrete):
         TensorVariable
         """
         res = at.switch(
-            at.or_(at.lt(value, lower), at.gt(value, upper)),
+            at.or_(at.lt(self, lower), at.gt(self, upper)),
             -np.inf,
-            logp(distribution, value),
+            logp(distribution, self),
         )
+
 
         return check_parameters(
             res,
@@ -195,8 +197,8 @@ class Bound:
         lower, upper, initval = cls._set_values(lower, upper, size, shape, initval)
         dist = ignore_logprob(dist)
 
-        if isinstance(dist.owner.op, Continuous):
-            res = _ContinuousBounded(
+        return (
+            _ContinuousBounded(
                 name,
                 [dist, lower, upper],
                 initval=floatX(initval),
@@ -204,8 +206,8 @@ class Bound:
                 shape=shape,
                 **kwargs,
             )
-        else:
-            res = _DiscreteBounded(
+            if isinstance(dist.owner.op, Continuous)
+            else _DiscreteBounded(
                 name,
                 [dist, lower, upper],
                 initval=intX(initval),
@@ -213,7 +215,7 @@ class Bound:
                 shape=shape,
                 **kwargs,
             )
-        return res
+        )
 
     @classmethod
     def dist(
@@ -281,9 +283,9 @@ class Bound:
             size = shape
 
         lower = np.asarray(lower)
-        lower = floatX(np.where(lower == None, -np.inf, lower))
+        lower = floatX(np.where(lower is None, -np.inf, lower))
         upper = np.asarray(upper)
-        upper = floatX(np.where(upper == None, np.inf, upper))
+        upper = floatX(np.where(upper is None, np.inf, upper))
 
         if initval is None:
             _size = np.broadcast_shapes(to_tuple(size), np.shape(lower), np.shape(upper))

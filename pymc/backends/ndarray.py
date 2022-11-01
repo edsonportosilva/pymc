@@ -87,7 +87,7 @@ class NDArray(base.BaseTrace):
         if self._stats is None:
             self._stats = []
             for sampler in sampler_vars:
-                data = dict()  # type: Dict[str, np.ndarray]
+                data = {}
                 self._stats.append(data)
                 for varname, dtype in sampler.items():
                     data[varname] = np.zeros(draws, dtype=dtype)
@@ -139,9 +139,7 @@ class NDArray(base.BaseTrace):
     # Selection methods
 
     def __len__(self):
-        if not self.samples:  # `setup` has not been called.
-            return 0
-        return self.draw_idx
+        return self.draw_idx if self.samples else 0
 
     def get_values(self, varname: str, burn=0, thin=1) -> np.ndarray:
         """Get values from trace.
@@ -201,12 +199,10 @@ def _slice_as_ndarray(strace, idx):
         sliced.samples = {
             v: strace.get_values(v, burn=idx.start, thin=idx.step) for v in strace.varnames
         }
-        sliced.draw_idx = (stop - start) // step
     else:
         start, stop, step = idx.indices(len(strace))
         sliced.samples = {v: strace.get_values(v)[start:stop:step] for v in strace.varnames}
-        sliced.draw_idx = (stop - start) // step
-
+    sliced.draw_idx = (stop - start) // step
     return sliced
 
 

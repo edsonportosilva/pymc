@@ -167,10 +167,7 @@ class Chain(RVTransform):
         # match the shape of the smallest log_jac_det
         det = 0.0
         for det_ in det_list:
-            if det_.ndim > ndim0:
-                det += det_.sum(axis=-1)
-            else:
-                det += det_
+            det += det_.sum(axis=-1) if det_.ndim > ndim0 else det_
         return det
 
 

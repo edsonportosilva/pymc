@@ -41,7 +41,6 @@ class TestInitvalAssignment:
 
         with pytest.raises(TypeError, match="Unexpected keyword argument `initval`."):
             pm.Normal.dist(1, 2, initval=None)
-        pass
 
     def test_new_warnings(self):
         with pm.Model() as pmodel:
@@ -50,7 +49,6 @@ class TestInitvalAssignment:
                 initial_point = pmodel.initial_point(seed=0)
                 assert initial_point["u_interval__"] == transform_fwd(rv, 0.75)
                 assert not hasattr(rv.tag, "test_value")
-        pass
 
     def test_valid_string_strategy(self):
         with pm.Model() as pmodel:
@@ -71,7 +69,6 @@ class TestInitvalEvaluation:
                 jitter_rvs={},
                 chains=1,
             )
-        pass
 
     def test_dependent_initvals(self):
         with pm.Model() as pmodel:
@@ -90,7 +87,6 @@ class TestInitvalEvaluation:
             ip = pmodel.initial_point(seed=0)
             assert ip["B1_interval__"] < 0
             assert ip["B2_interval__"] == 0
-        pass
 
     def test_nested_initvals(self):
         # See issue #5168
@@ -127,7 +123,6 @@ class TestInitvalEvaluation:
             data.set_value(np.arange(5))
             ip = pmodel.initial_point(seed=0)
             assert np.shape(ip["u_interval__"]) == (5,)
-        pass
 
     def test_seeding(self):
         with pm.Model() as pmodel:
@@ -139,7 +134,6 @@ class TestInitvalEvaluation:
             ip3 = pmodel.initial_point(seed=15)
             assert ip1 == ip2
             assert ip3 != ip2
-        pass
 
     def test_untransformed_initial_point(self):
         with pm.Model() as pmodel:
@@ -149,7 +143,6 @@ class TestInitvalEvaluation:
         iv = fn(0)
         assert iv["A"] == 0
         assert iv["B"] == 1
-        pass
 
     def test_adds_jitter(self):
         with pm.Model() as pmodel:
@@ -242,7 +235,6 @@ class TestMoment:
         rv = rv_cls.dist(shape=(s,))
         assert not hasattr(rv.tag, "test_value")
         assert tuple(moment(rv).shape.eval({s: 4})) == (4,)
-        pass
 
     @pytest.mark.parametrize("rv_cls", [pm.Flat, pm.HalfFlat])
     def test_moment_from_dims(self, rv_cls):
@@ -255,7 +247,6 @@ class TestMoment:
             rv = rv_cls("rv", dims=("year", "city"))
             assert not hasattr(rv.tag, "test_value")
             assert tuple(moment(rv).shape.eval()) == (4, 3)
-        pass
 
     def test_moment_not_implemented_fallback(self):
         class MyNormalRV(RandomVariable):

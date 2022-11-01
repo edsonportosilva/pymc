@@ -110,15 +110,13 @@ def test_all_distributions_have_moments():
         dist_module.multivariate.Wishart,
     }
 
-    unexpected_implemented = not_implemented - missing_moments
-    if unexpected_implemented:
+    if unexpected_implemented := not_implemented - missing_moments:
         raise Exception(
             f"Distributions {unexpected_implemented} have a `moment` implemented. "
             "This test must be updated to expect this."
         )
 
-    unexpected_not_implemented = missing_moments - not_implemented
-    if unexpected_not_implemented:
+    if unexpected_not_implemented := missing_moments - not_implemented:
         raise NotImplementedError(
             f"Unexpected by this test, distributions {unexpected_not_implemented} do "
             "not have a `moment` implementation. Either add a moment or filter "
@@ -1233,11 +1231,7 @@ def test_density_dist_default_moment_multivariate(with_random, size):
     def _random(mu, rng=None, size=None):
         return rng.normal(mu, scale=1, size=to_tuple(size) + mu.shape)
 
-    if with_random:
-        random = _random
-    else:
-        random = None
-
+    random = _random if with_random else None
     mu_val = np.random.normal(loc=2, scale=1, size=5).astype(aesara.config.floatX)
     with pm.Model():
         mu = pm.Normal("mu", size=5)

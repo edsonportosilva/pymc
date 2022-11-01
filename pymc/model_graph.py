@@ -44,12 +44,7 @@ class ModelGraph:
 
         def _filter_non_parameter_inputs(var):
             node = var.owner
-            if isinstance(node.op, RandomVariable):
-                # Filter out rng, dtype and size parameters or RandomVariable nodes
-                return node.inputs[3:]
-            else:
-                # Otherwise return all inputs
-                return node.inputs
+            return node.inputs[3:] if isinstance(node.op, RandomVariable) else node.inputs
 
         def _expand(x):
             if x.name:
@@ -79,9 +74,11 @@ class ModelGraph:
                 raise ValueError(f"{var_name} is not in this model.")
 
             for model_var in self.var_list:
-                if hasattr(model_var.tag, "observations"):
-                    if model_var.tag.observations == self.model[var_name]:
-                        selected_names.add(model_var.name)
+                if (
+                    hasattr(model_var.tag, "observations")
+                    and model_var.tag.observations == self.model[var_name]
+                ):
+                    selected_names.add(model_var.name)
 
         selected_ancestors = set(
             filter(
@@ -232,7 +229,7 @@ class ModelGraph:
         for plate_label, all_var_names in self.get_plates(var_names).items():
             if plate_label:
                 # must be preceded by 'cluster' to get a box around it
-                with graph.subgraph(name="cluster" + plate_label) as sub:
+                with graph.subgraph(name=f"cluster{plate_label}") as sub:
                     for var_name in all_var_names:
                         self._make_node(var_name, sub, formatting=formatting)
                     # plate label goes bottom right
@@ -270,16 +267,20 @@ class ModelGraph:
             if plate_label:
                 # # must be preceded by 'cluster' to get a box around it
 
-                subgraphnetwork = networkx.DiGraph(name="cluster" + plate_label, label=plate_label)
+                subgraphnetwork = networkx.DiGraph(
+                    name=f"cluster{plate_label}", label=plate_label
+                )
+
 
                 for var_name in all_var_names:
                     self._make_node(
                         var_name,
                         subgraphnetwork,
                         nx=True,
-                        cluster="cluster" + plate_label,
+                        cluster=f"cluster{plate_label}",
                         formatting=formatting,
                     )
+
                 for sgn in subgraphnetwork.nodes:
                     networkx.set_node_attributes(
                         subgraphnetwork,
@@ -357,7 +358,7 @@ def model_to_networkx(
 
         model_to_networkx(schools)
     """
-    if not "plain" in formatting:
+    if "plain" not in formatting:
 
         raise ValueError(f"Unsupported formatting for graph nodes: '{formatting}'. See docstring.")
 
@@ -421,7 +422,7 @@ def model_to_graphviz(
 
         model_to_graphviz(schools)
     """
-    if not "plain" in formatting:
+    if "plain" not in formatting:
         raise ValueError(f"Unsupported formatting for graph nodes: '{formatting}'. See docstring.")
     if formatting != "plain":
         warnings.warn(

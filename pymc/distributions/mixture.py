@@ -173,15 +173,19 @@ class Mixture(SymbolicDistribution):
                 UserWarning,
             )
 
-        if len(comp_dists) > 1:
-            if not (
-                all(comp_dist.dtype in continuous_types for comp_dist in comp_dists)
-                or all(comp_dist.dtype in discrete_types for comp_dist in comp_dists)
-            ):
-                raise ValueError(
-                    "All distributions in comp_dists must be either discrete or continuous.\n"
-                    "See the following issue for more information: https://github.com/pymc-devs/pymc/issues/4511."
-                )
+        if (
+            len(comp_dists) > 1
+            and any(
+                comp_dist.dtype not in continuous_types for comp_dist in comp_dists
+            )
+            and any(
+                comp_dist.dtype not in discrete_types for comp_dist in comp_dists
+            )
+        ):
+            raise ValueError(
+                "All distributions in comp_dists must be either discrete or continuous.\n"
+                "See the following issue for more information: https://github.com/pymc-devs/pymc/issues/4511."
+            )
 
         # Check that components are not associated with a registered variable in the model
         components_ndim_supp = set()
@@ -362,11 +366,12 @@ def marginal_mixture_logprob(op, values, rng, weights, *components, **kwargs):
 
     mix_logp = check_parameters(
         mix_logp,
-        0 <= weights,
+        weights >= 0,
         weights <= 1,
         at.isclose(at.sum(weights, axis=-1), 1),
         msg="0 <= weights <= 1, sum(weights) == 1",
     )
+
 
     return mix_logp
 
@@ -389,11 +394,12 @@ def marginal_mixture_logcdf(op, value, rng, weights, *components, **kwargs):
 
     mix_logcdf = check_parameters(
         mix_logcdf,
-        0 <= weights,
+        weights >= 0,
         weights <= 1,
         at.isclose(at.sum(weights, axis=-1), 1),
         msg="0 <= weights <= 1, sum(weights) == 1",
     )
+
 
     return mix_logcdf
 

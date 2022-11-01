@@ -217,10 +217,7 @@ def biwrap(wrapper):
     @functools.wraps(wrapper)
     def enhanced(*args, **kwargs):
         is_bound_method = hasattr(args[0], wrapper.__name__) if args else False
-        if is_bound_method:
-            count = 1
-        else:
-            count = 0
+        count = 1 if is_bound_method else 0
         if len(args) > count:
             newfn = wrapper(*args, **kwargs)
             return newfn
@@ -240,8 +237,11 @@ def dataset_to_point_list(ds: xarray.Dataset) -> List[Dict[str, np.ndarray]]:
     points: List[Dict[Hashable, np.ndarray]] = []
     da: "xarray.DataArray"
     for c in ds.chain:
-        for d in ds.draw:
-            points.append({vn: da.sel(chain=c, draw=d).values for vn, da in ds.items()})
+        points.extend(
+            {vn: da.sel(chain=c, draw=d).values for vn, da in ds.items()}
+            for d in ds.draw
+        )
+
     # use the list of points
     return cast(List[Dict[str, np.ndarray]], points)
 
@@ -286,10 +286,7 @@ def hashable(a=None) -> int:
     try:
         return hash(cloudpickle.dumps(a))
     except Exception:
-        if hasattr(a, "__dict__"):
-            return hashable(a.__dict__)
-        else:
-            return id(a)
+        return hashable(a.__dict__) if hasattr(a, "__dict__") else id(a)
 
 
 def hash_key(*args, **kwargs):

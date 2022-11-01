@@ -40,8 +40,7 @@ def from_yaml():
         wfname = wf.strip(".yml")
         wfdef = yaml.safe_load(open(Path(".github", "workflows", wf)))
         for jobname, jobdef in wfdef["jobs"].items():
-            matrix = jobdef.get("strategy", {}).get("matrix", {})
-            if matrix:
+            if matrix := jobdef.get("strategy", {}).get("matrix", {}):
                 matrices[(wfname, jobname)] = matrix
             else:
                 _log.warning("No matrix in %s/%s", wf, jobname)

@@ -32,10 +32,9 @@ from pymc.sampling import sample, sample_posterior_predictive, sample_prior_pred
 def missing_data(request):
     if request.param == "masked":
         return ma.masked_values([1, 2, -1, 4, -1], value=-1)
-    else:
-        # request.param == "pandas"
-        pd = pytest.importorskip("pandas")
-        return pd.DataFrame([1, 2, np.nan, 4, np.nan])
+    # request.param == "pandas"
+    pd = pytest.importorskip("pandas")
+    return pd.DataFrame([1, 2, np.nan, 4, np.nan])
 
 
 def test_missing(missing_data):
@@ -135,8 +134,8 @@ def test_interval_missing_observations():
             chains=1, draws=50, compute_convergence_checks=False, return_inferencedata=False
         )
 
-        assert np.all(0 < trace["theta1_missing"].mean(0))
-        assert np.all(0 < trace["theta2_missing"].mean(0))
+        assert np.all(trace["theta1_missing"].mean(0) > 0)
+        assert np.all(trace["theta2_missing"].mean(0) > 0)
         assert "theta1" not in trace.varnames
         assert "theta2" not in trace.varnames
 

@@ -76,9 +76,7 @@ def generate_normal_mixture_data(w, mu, sigma, size=1000):
     sigma_ = np.array([sigma[..., comp] for comp in component.ravel()])
     mu_ = np.reshape(mu_, out_size)
     sigma_ = np.reshape(sigma_, out_size)
-    x = np.random.normal(mu_, sigma_, size=out_size)
-
-    return x
+    return np.random.normal(mu_, sigma_, size=out_size)
 
 
 def generate_poisson_mixture_data(w, mu, size=1000):
@@ -87,9 +85,7 @@ def generate_poisson_mixture_data(w, mu, size=1000):
     out_size = to_tuple(size) + mu.shape[:-1]
     mu_ = np.array([mu[..., comp] for comp in component.ravel()])
     mu_ = np.reshape(mu_, out_size)
-    x = np.random.poisson(mu_, size=out_size)
-
-    return x
+    return np.random.poisson(mu_, size=out_size)
 
 
 class TestMixture(SeededTest):
@@ -598,10 +594,7 @@ class TestMixture(SeededTest):
 
     @pytest.mark.xfail(reason="Nested mixtures not refactored yet")
     def test_nested_mixture(self):
-        if aesara.config.floatX == "float32":
-            rtol = 1e-4
-        else:
-            rtol = 1e-7
+        rtol = 1e-4 if aesara.config.floatX == "float32" else 1e-7
         nbr = 4
         with Model() as model:
             # mixtures components
@@ -952,10 +945,7 @@ class TestMixtureVsLatent(SeededTest):
                 on_unused_input="ignore",
             )
 
-        if aesara.config.floatX == "float32":
-            rtol = 1e-4
-        else:
-            rtol = 1e-7
+        rtol = 1e-4 if aesara.config.floatX == "float32" else 1e-7
         test_point = model.initial_point()
         test_point["m"] = test_point["latent_m"]
 
@@ -1012,11 +1002,7 @@ class TestMixtureSameFamily(SeededTest):
         assert prior["mixture"].shape == (self.n_samples, *batch_shape, 3)
         assert draw(mixture, draws=self.size).shape == (self.size, *batch_shape, 3)
 
-        if aesara.config.floatX == "float32":
-            rtol = 1e-4
-        else:
-            rtol = 1e-7
-
+        rtol = 1e-4 if aesara.config.floatX == "float32" else 1e-7
         initial_point = model.initial_point()
         comp_logp = logp(comp_dists, initial_point["mixture"].reshape(*batch_shape, 1, 3))
         log_sum_exp = logsumexp(
@@ -1044,11 +1030,7 @@ class TestMixtureSameFamily(SeededTest):
         assert prior["mixture"].shape == (self.n_samples, 3)
         assert draw(mixture, draws=self.size).shape == (self.size, 3)
 
-        if aesara.config.floatX == "float32":
-            rtol = 1e-4
-        else:
-            rtol = 1e-7
-
+        rtol = 1e-4 if aesara.config.floatX == "float32" else 1e-7
         initial_point = model.initial_point()
         comp_logp = logp(comp_dists, initial_point["mixture"].reshape(1, 3))
         log_sum_exp = logsumexp(comp_logp.eval() + np.log(w), axis=0, keepdims=True).sum()

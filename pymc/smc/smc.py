@@ -203,11 +203,7 @@ class SMC_KERNEL(ABC):
         for v in self.variables:
             self.var_info[v.name] = (initial_point[v.name].shape, initial_point[v.name].size)
         # Create particles bijection map
-        if self.start:
-            init_rnd = self.start
-        else:
-            init_rnd = self.initialize_population()
-
+        init_rnd = self.start or self.initialize_population()
         population = []
         for i in range(self.draws):
             point = Point({v.name: init_rnd[v.name][i] for v in self.variables}, model=self.model)
@@ -338,7 +334,7 @@ class SMC_KERNEL(ABC):
                     var_samples = np.round(var_samples).astype(var.dtype)
                 value.append(var_samples.reshape(shape))
                 size += new_size
-            strace.record(point={k: v for k, v in zip(varnames, value)})
+            strace.record(point=dict(zip(varnames, value)))
         return strace
 
 

@@ -173,7 +173,7 @@ class HamiltonianMC(BaseHMC):
             end.model_logp,
             end.index_in_trajectory,
         )
-        stats.update(self.potential.stats())
+        stats |= self.potential.stats()
         return HMCStepData(end, accept_stat, div_info, stats)
 
     @staticmethod

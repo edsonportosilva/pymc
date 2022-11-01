@@ -59,8 +59,7 @@ class DictToArrayBijection:
     def map(var_dict: PointType) -> RaveledVars:
         """Map a dictionary of names and variables to a concatenated 1D array space."""
         vars_info = tuple((v, k, v.shape, v.dtype) for k, v in var_dict.items())
-        raveled_vars = [v[0].ravel() for v in vars_info]
-        if raveled_vars:
+        if raveled_vars := [v[0].ravel() for v in vars_info]:
             result = np.concatenate(raveled_vars)
         else:
             result = np.array([])
@@ -81,11 +80,7 @@ class DictToArrayBijection:
             An optional dictionary of initial values.
 
         """
-        if start_point:
-            result = dict(start_point)
-        else:
-            result = {}
-
+        result = dict(start_point) if start_point else {}
         if not isinstance(array, RaveledVars):
             raise TypeError("`array` must be a `RaveledVars` type")
 

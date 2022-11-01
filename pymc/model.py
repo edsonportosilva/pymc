@@ -184,21 +184,21 @@ class ContextMeta(type):
             cls._context_class = context_class
         super().__init__(name, bases, nmspc)
 
-    def get_context(cls, error_if_none=True) -> Optional[T]:
+    def get_context(self, error_if_none=True) -> Optional[T]:
         """Return the most recently pushed context object of type ``cls``
         on the stack, or ``None``. If ``error_if_none`` is True (default),
         raise a ``TypeError`` instead of returning ``None``."""
         try:
-            candidate = cls.get_contexts()[-1]  # type: Optional[T]
+            candidate = self.get_contexts()[-1]
         except IndexError as e:
             # Calling code expects to get a TypeError if the entity
             # is unfound, and there's too much to fix.
             if error_if_none:
-                raise TypeError(f"No {cls} on context stack")
+                raise TypeError(f"No {self} on context stack")
             return None
         return candidate
 
-    def get_contexts(cls) -> List[T]:
+    def get_contexts(self) -> List[T]:
         """Return a stack of context instances for the ``context_class``
         of ``cls``."""
         # This lazily creates the context class's contexts
@@ -209,7 +209,7 @@ class ContextMeta(type):
 
         # no race-condition here, contexts is a thread-local object
         # be sure not to override contexts in a subclass however!
-        context_class = cls.context_class
+        context_class = self.context_class
         assert isinstance(
             context_class, type
         ), f"Name of context class, {context_class} was not resolvable to a class"
@@ -251,8 +251,8 @@ class ContextMeta(type):
 
     # Initialize object in its own context...
     # Merged from InitContextMeta in the original.
-    def __call__(cls, *args, **kwargs):
-        instance = cls.__new__(cls, *args, **kwargs)
+    def __call__(self, *args, **kwargs):
+        instance = self.__new__(self, *args, **kwargs)
         with instance:  # appends context
             instance.__init__(*args, **kwargs)
         return instance
@@ -266,10 +266,10 @@ def modelcontext(model: Optional["Model"]) -> "Model":
     if model is None:
         model = Model.get_context(error_if_none=False)
 
-        if model is None:
-            # TODO: This should be a ValueError, but that breaks
-            # ArviZ (and others?), so might need a deprecation.
-            raise TypeError("No model on context stack.")
+    if model is None:
+        # TODO: This should be a ValueError, but that breaks
+        # ArviZ (and others?), so might need a deprecation.
+        raise TypeError("No model on context stack.")
     return model
 
 
@@ -364,8 +364,9 @@ class ValueGradFunction:
         self._extra_vars_shared = {}
         for var, value in extra_vars_and_values.items():
             shared = aesara.shared(
-                value, var.name + "_shared__", shape=[s == 1 for s in value.shape]
+                value, f"{var.name}_shared__", shape=[s == 1 for s in value.shape]
             )
+
             self._extra_vars_shared[var.name] = shared
             givens.append((var, shared))
 
@@ -416,11 +417,8 @@ class ValueGradFunction:
 
             if grad_out is None:
                 return cost, grads_raveled.data
-            else:
-                np.copyto(grad_out, grads_raveled.data)
-                return cost
-        else:
-            return cost
+            np.copyto(grad_out, grads_raveled.data)
+        return cost
 
     @property
     def profile(self):
@@ -624,15 +622,11 @@ class Model(WithMemoization, metaclass=ContextMeta):
         if grad_vars is None:
             grad_vars = [self.rvs_to_values[v] for v in typefilter(self.free_RVs, continuous_types)]
         else:
-            for i, var in enumerate(grad_vars):
+            for var in grad_vars:
                 if var.dtype not in continuous_types:
                     raise ValueError(f"Can only compute the gradient of continuous types: {var}")
 
-        if tempered:
-            costs = [self.varlogp, self.datalogp]
-        else:
-            costs = [self.logp()]
-
+        costs = [self.varlogp, self.datalogp] if tempered else [self.logp()]
         input_vars = {i for i in graph_inputs(costs) if not isinstance(i, Constant)}
         extra_vars = [self.rvs_to_values.get(var, var) for var in self.free_RVs]
         ip = self.initial_point(0)
@@ -744,14 +738,13 @@ class Model(WithMemoization, metaclass=ContextMeta):
             if value_var is not None:
                 rv_values[var] = value_var
                 rv_order.append(i)
+            elif var in self.potentials:
+                potentials.append(var)
+                potential_order.append(i)
             else:
-                if var in self.potentials:
-                    potentials.append(var)
-                    potential_order.append(i)
-                else:
-                    raise ValueError(
-                        f"Requested variable {var} not found among the model variables"
-                    )
+                raise ValueError(
+                    f"Requested variable {var} not found among the model variables"
+                )
 
         rv_logps: List[TensorVariable] = []
         if rv_values:
@@ -810,7 +803,7 @@ class Model(WithMemoization, metaclass=ContextMeta):
                 vars = [vars]
 
             value_vars = []
-            for i, var in enumerate(vars):
+            for var in vars:
                 value_var = self.rvs_to_values.get(var)
                 if value_var is not None:
                     value_vars.append(value_var)
@@ -855,7 +848,7 @@ class Model(WithMemoization, metaclass=ContextMeta):
                 vars = [vars]
 
             value_vars = []
-            for i, var in enumerate(vars):
+            for var in vars:
                 value_var = self.rvs_to_values.get(var)
                 if value_var is not None:
                     value_vars.append(value_var)
@@ -1138,9 +1131,8 @@ class Model(WithMemoization, metaclass=ContextMeta):
             # Conversion to a tuple ensures that the coordinate values are immutable.
             # Also unlike numpy arrays the's tuple.index(...) which is handy to work with.
             values = tuple(values)
-        if name in self.coords:
-            if not np.array_equal(values, self.coords[name]):
-                raise ValueError(f"Duplicate and incompatible coordinate: {name}.")
+        if name in self.coords and not np.array_equal(values, self.coords[name]):
+            raise ValueError(f"Duplicate and incompatible coordinate: {name}.")
         if length is not None and not isinstance(length, (int, Variable)):
             raise ValueError(
                 f"The `length` passed for the '{name}' coord must be an int, Aesara Variable or None."
@@ -1148,10 +1140,7 @@ class Model(WithMemoization, metaclass=ContextMeta):
         if length is None:
             length = len(values)
         if not isinstance(length, Variable):
-            if mutable:
-                length = aesara.shared(length)
-            else:
-                length = aesara.tensor.constant(length)
+            length = aesara.shared(length) if mutable else aesara.tensor.constant(length)
         self._dim_lengths[name] = length
         self._coords[name] = values
 
@@ -1191,10 +1180,11 @@ class Model(WithMemoization, metaclass=ContextMeta):
             len_cvals = len(coord_values)
             if len_cvals != new_length:
                 raise ShapeError(
-                    f"Length of new coordinate values does not match the new dimension length.",
+                    "Length of new coordinate values does not match the new dimension length.",
                     actual=len_cvals,
                     expected=new_length,
                 )
+
             self._coords[name] = tuple(coord_values)
         self.dim_lengths[name].set_value(new_length)
         return
@@ -1253,13 +1243,12 @@ class Model(WithMemoization, metaclass=ContextMeta):
             # NOTE: If there are multiple pm.MutableData containers sharing this dim, but the user only
             #       changes the values for one of them, they will run into shape problems nonetheless.
             if length_changed:
-                if original_coords is not None:
-                    if new_coords is None:
-                        raise ValueError(
-                            f"The '{name}' variable already had {len(original_coords)} coord values defined for "
-                            f"its {dname} dimension. With the new values this dimension changes to length "
-                            f"{new_length}, so new coord values for the {dname} dimension are required."
-                        )
+                if original_coords is not None and new_coords is None:
+                    raise ValueError(
+                        f"The '{name}' variable already had {len(original_coords)} coord values defined for "
+                        f"its {dname} dimension. With the new values this dimension changes to length "
+                        f"{new_length}, so new coord values for the {dname} dimension are required."
+                    )
                 if isinstance(length_tensor, TensorConstant):
                     # The dimension was fixed in length.
                     # Resizing a data variable in this dimension would
@@ -1356,7 +1345,7 @@ class Model(WithMemoization, metaclass=ContextMeta):
         # the length of the corresponding RV dimension.
         if dims is not None:
             for d, dname in enumerate(dims):
-                if not dname in self.dim_lengths:
+                if dname not in self.dim_lengths:
                     self.add_coord(dname, values=None, length=rv_var.shape[d])
 
         if data is None:
@@ -1364,8 +1353,7 @@ class Model(WithMemoization, metaclass=ContextMeta):
             self.create_value_var(rv_var, transform)
             self.add_random_variable(rv_var, dims)
             self.set_initval(rv_var, initval)
-        else:
-            if (
+        elif (
                 isinstance(data, Variable)
                 and not isinstance(data, (GenTensorVariable, Minibatch))
                 and data.owner is not None
@@ -1376,11 +1364,12 @@ class Model(WithMemoization, metaclass=ContextMeta):
                     and isinstance(data.owner.op.scalar_op, Cast)
                 )
             ):
-                raise TypeError(
-                    "Variables that depend on other nodes cannot be used for observed data."
-                    f"The data variable was: {data}"
-                )
+            raise TypeError(
+                "Variables that depend on other nodes cannot be used for observed data."
+                f"The data variable was: {data}"
+            )
 
+        else:
             # `rv_var` is potentially changed by `make_obs_var`,
             # for example into a new graph for imputation of missing data.
             rv_var = self.make_obs_var(rv_var, data, dims, transform)
@@ -1575,10 +1564,12 @@ class Model(WithMemoization, metaclass=ContextMeta):
         """Checks if name has prefix and adds if needed"""
         name = self._validate_name(name)
         if self.prefix:
-            if not name.startswith(self.prefix + "::"):
-                return f"{self.prefix}::{name}"
-            else:
-                return name
+            return (
+                name
+                if name.startswith(f"{self.prefix}::")
+                else f"{self.prefix}::{name}"
+            )
+
         else:
             return name
 
@@ -1587,7 +1578,7 @@ class Model(WithMemoization, metaclass=ContextMeta):
         name = self._validate_name(name)
         if not self.prefix or not name:
             return name
-        elif name.startswith(self.prefix + "::"):
+        elif name.startswith(f"{self.prefix}::"):
             return name[len(self.prefix) + 2 :]
         else:
             return name
@@ -1641,9 +1632,7 @@ class Model(WithMemoization, metaclass=ContextMeta):
                 **kwargs,
             )
 
-        if point_fn:
-            return PointFunc(fn)
-        return fn
+        return PointFunc(fn) if point_fn else fn
 
     def profile(self, outs, *, n=1000, point=None, profile=True, **kwargs):
         """Compiles and profiles an Aesara function which returns ``outs`` and
@@ -1714,9 +1703,7 @@ class Model(WithMemoization, metaclass=ContextMeta):
             )
             last_idx += arr_len
 
-        flat_view = FlatView(inputvar, replacements)
-
-        return flat_view
+        return FlatView(inputvar, replacements)
 
     def update_start_vals(self, a: Dict[str, np.ndarray], b: Dict[str, np.ndarray]):
         r"""Update point `a` with `b`, without overwriting existing keys.

@@ -51,10 +51,7 @@ def make_sens_ic(n_states, n_theta, floatX):
     # Slip in the identity matrix in the appropirate place
     sens_matrix[:, :n_states] = np.eye(n_states, dtype=floatX)
 
-    # We need the sensitivity matrix to be a vector (see augmented_function)
-    # Ravel and return
-    dydp = sens_matrix.ravel()
-    return dydp
+    return sens_matrix.ravel()
 
 
 def augment_system(ode_func, n_states, n_theta):
@@ -105,13 +102,12 @@ def augment_system(ode_func, n_states, n_theta):
     yhat = ode_func(t_y, t_t, t_p[n_states:])
     if isinstance(yhat, at.TensorVariable):
         t_yhat = at.atleast_1d(yhat)
-    else:
-        # Stack the results of the ode_func into a single tensor variable
-        if not isinstance(yhat, (list, tuple)):
-            raise TypeError(
-                f"Unexpected type, {type(yhat)}, returned by ode_func. TensorVariable, list or tuple is expected."
-            )
+    elif isinstance(yhat, (list, tuple)):
         t_yhat = at.stack(yhat, axis=0)
+    else:
+        raise TypeError(
+            f"Unexpected type, {type(yhat)}, returned by ode_func. TensorVariable, list or tuple is expected."
+        )
     if t_yhat.ndim > 1:
         raise ValueError(
             f"The odefunc returned a {t_yhat.ndim}-dimensional tensor, but 0 or 1 dimensions were expected."
@@ -127,8 +123,8 @@ def augment_system(ode_func, n_states, n_theta):
     # This is the time derivative of dydp
     ddt_dydp = (Jdfdy + grad_f).flatten()
 
-    system = aesara.function(
-        inputs=[t_y, t_t, t_p, dydp_vec], outputs=[t_yhat, ddt_dydp], on_unused_input="ignore"
+    return aesara.function(
+        inputs=[t_y, t_t, t_p, dydp_vec],
+        outputs=[t_yhat, ddt_dydp],
+        on_unused_input="ignore",
     )
-
-    return system

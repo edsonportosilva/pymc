@@ -103,7 +103,7 @@ class BaseTrace(ABC):
         for stats in sampler_vars:
             for key, dtype in stats.items():
                 if dtypes.setdefault(key, dtype) != dtype:
-                    raise ValueError("Sampler statistic %s appears with " "different types." % key)
+                    raise ValueError(f"Sampler statistic {key} appears with different types.")
 
         self.sampler_vars = sampler_vars
 
@@ -199,7 +199,7 @@ class BaseTrace(ABC):
 
         sampler_idxs = [i for i, s in enumerate(self.sampler_vars) if stat_name in s]
         if not sampler_idxs:
-            raise KeyError("Unknown sampler stat %s" % stat_name)
+            raise KeyError(f"Unknown sampler stat {stat_name}")
 
         vals = np.stack(
             [self._get_sampler_stats(stat_name, i, burn, thin) for i in sampler_idxs], axis=-1
@@ -233,13 +233,12 @@ class BaseTrace(ABC):
 
     @property
     def stat_names(self):
-        if self.supports_sampler_stats:
-            names = set()
-            for vars in self.sampler_vars or []:
-                names.update(vars.keys())
-            return names
-        else:
+        if not self.supports_sampler_stats:
             return set()
+        names = set()
+        for vars in self.sampler_vars or []:
+            names.update(vars.keys())
+        return names
 
 
 class MultiTrace:
@@ -355,7 +354,7 @@ class MultiTrace:
             return self.get_values(var, burn=burn, thin=thin)
         if var in self.stat_names:
             return self.get_sampler_stats(var, burn=burn, thin=thin)
-        raise KeyError("Unknown variable %s" % var)
+        raise KeyError(f"Unknown variable {var}")
 
     _attrs = {"_straces", "varnames", "chains", "stat_names", "supports_sampler_stats", "_report"}
 
@@ -392,7 +391,7 @@ class MultiTrace:
         if not self._straces:
             return set()
         sampler_vars = [s.sampler_vars for s in self._straces.values()]
-        if not all(svars == sampler_vars[0] for svars in sampler_vars):
+        if any(svars != sampler_vars[0] for svars in sampler_vars):
             raise ValueError("Inividual chains contain different sampler stats")
         names = set()
         for trace in self._straces.values():
@@ -423,12 +422,11 @@ class MultiTrace:
         for k, v in vals.items():
             new_var = 1
             if k in self.varnames:
-                if overwrite:
-                    self.varnames.remove(k)
-                    new_var = 0
-                else:
+                if not overwrite:
                     raise ValueError(f"Variable name {k} already exists.")
 
+                self.varnames.remove(k)
+                new_var = 0
             self.varnames.append(k)
 
             chains = self._straces
@@ -436,11 +434,9 @@ class MultiTrace:
             l_v = len(v)
             if l_v != l_samples:
                 warnings.warn(
-                    "The length of the values you are trying to "
-                    "add ({}) does not match the number ({}) of "
-                    "total samples in the trace "
-                    "(chains * iterations)".format(l_v, l_samples)
+                    f"The length of the values you are trying to add ({l_v}) does not match the number ({l_samples}) of total samples in the trace (chains * iterations)"
                 )
+
 
             v = np.squeeze(v.reshape(len(chains), len(self), -1))
 
@@ -520,7 +516,7 @@ class MultiTrace:
         such samplers, and `n` is the number of samples.
         """
         if stat_name not in self.stat_names:
-            raise KeyError("Unknown sampler statistic %s" % stat_name)
+            raise KeyError(f"Unknown sampler statistic {stat_name}")
 
         if chains is None:
             chains = self.chains
@@ -587,7 +583,7 @@ def merge_traces(mtraces: List[MultiTrace]) -> MultiTrace:
     -------
     A MultiTrace instance with merged chains
     """
-    if len(mtraces) == 0:
+    if not mtraces:
         raise ValueError("Cannot merge an empty set of traces.")
     base_mtrace = mtraces[0]
     chain_len = len(base_mtrace)
@@ -614,7 +610,6 @@ def _squeeze_cat(results, combine, squeeze):
         results = np.concatenate(results)
         if not squeeze:
             results = [results]
-    else:
-        if squeeze and len(results) == 1:
-            results = results[0]
+    elif squeeze and len(results) == 1:
+        results = results[0]
     return results

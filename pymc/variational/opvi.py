@@ -144,15 +144,12 @@ def try_to_set_test_value(node_in, node_out, s):
     if not isinstance(node_out, (list, tuple)):
         node_out = [node_out]
     for i, o in zip(node_in, node_out):
-        if hasattr(i.tag, "test_value"):
-            if not hasattr(s.tag, "test_value"):
-                continue
-            else:
-                tv = i.tag.test_value[None, ...]
-                tv = np.repeat(tv, s.tag.test_value, 0)
-                if _s is None:
-                    tv = tv[0]
-                o.tag.test_value = tv
+        if hasattr(i.tag, "test_value") and hasattr(s.tag, "test_value"):
+            tv = i.tag.test_value[None, ...]
+            tv = np.repeat(tv, s.tag.test_value, 0)
+            if _s is None:
+                tv = tv[0]
+            o.tag.test_value = tv
 
 
 class ObjectiveUpdates(aesara.OrderedUpdates):
@@ -225,7 +222,7 @@ class ObjectiveFunction:
         :class:`ObjectiveUpdates`
         """
         if more_updates is None:
-            more_updates = dict()
+            more_updates = {}
         resulting_updates = ObjectiveUpdates()
         if self.test_params:
             self.add_test_updates(
@@ -264,7 +261,7 @@ class ObjectiveFunction:
         if more_tf_params is None:
             more_tf_params = []
         if more_replacements is None:
-            more_replacements = dict()
+            more_replacements = {}
         tf_target = self(
             tf_n_mc, more_tf_params=more_tf_params, more_replacements=more_replacements
         )
@@ -285,7 +282,7 @@ class ObjectiveFunction:
         if more_obj_params is None:
             more_obj_params = []
         if more_replacements is None:
-            more_replacements = dict()
+            more_replacements = {}
         obj_target = self(
             obj_n_mc, more_obj_params=more_obj_params, more_replacements=more_replacements
         )
@@ -351,7 +348,7 @@ class ObjectiveFunction:
         if fn_kwargs is None:
             fn_kwargs = {}
         if score and not self.op.returns_loss:
-            raise NotImplementedError("%s does not have loss" % self.op)
+            raise NotImplementedError(f"{self.op} does not have loss")
         updates = self.updates(
             obj_n_mc=obj_n_mc,
             tf_n_mc=tf_n_mc,
@@ -363,16 +360,16 @@ class ObjectiveFunction:
             more_replacements=more_replacements,
             total_grad_norm_constraint=total_grad_norm_constraint,
         )
-        if score:
-            step_fn = compile_pymc([], updates.loss, updates=updates, **fn_kwargs)
-        else:
-            step_fn = compile_pymc([], [], updates=updates, **fn_kwargs)
-        return step_fn
+        return (
+            compile_pymc([], updates.loss, updates=updates, **fn_kwargs)
+            if score
+            else compile_pymc([], [], updates=updates, **fn_kwargs)
+        )
 
     @aesara.config.change_flags(compute_test_value="off")
     def score_function(
         self, sc_n_mc=None, more_replacements=None, fn_kwargs=None
-    ):  # pragma: no cover
+    ):    # pragma: no cover
         R"""Compile scoring function that operates which takes no inputs and returns Loss
 
         Parameters
@@ -391,7 +388,7 @@ class ObjectiveFunction:
         if fn_kwargs is None:
             fn_kwargs = {}
         if not self.op.returns_loss:
-            raise NotImplementedError("%s does not have loss" % self.op)
+            raise NotImplementedError(f"{self.op} does not have loss")
         if more_replacements is None:
             more_replacements = {}
         loss = self(sc_n_mc, more_replacements=more_replacements)
@@ -399,10 +396,7 @@ class ObjectiveFunction:
 
     @aesara.config.change_flags(compute_test_value="off")
     def __call__(self, nmc, **kwargs):
-        if "more_tf_params" in kwargs:
-            m = -1.0
-        else:
-            m = 1.0
+        m = -1.0 if "more_tf_params" in kwargs else 1.0
         a = self.op.apply(self.tf)
         a = self.approx.set_size_and_deterministic(a, nmc, 0, kwargs.get("more_replacements"))
         return m * self.op.T(a)
@@ -470,15 +464,16 @@ class Operator:
     def __call__(self, f=None):
         if self.has_test_function:
             if f is None:
-                raise ParametrizationError("Operator %s requires TestFunction" % self)
-            else:
-                if not isinstance(f, TestFunction):
-                    f = TestFunction.from_function(f)
+                raise ParametrizationError(f"Operator {self} requires TestFunction")
+            if not isinstance(f, TestFunction):
+                f = TestFunction.from_function(f)
         else:
             if f is not None:
-                warnings.warn("TestFunction for %s is redundant and removed" % self, stacklevel=3)
-            else:
-                pass
+                warnings.warn(
+                    f"TestFunction for {self} is redundant and removed",
+                    stacklevel=3,
+                )
+
             f = TestFunction()
         f.setup(self.approx)
         return self.objective_class(self, f)
@@ -502,11 +497,12 @@ def collect_shared_to_list(params):
     List
     """
     if isinstance(params, dict):
-        return list(
+        return [
             t[1]
             for t in sorted(params.items(), key=lambda t: t[0])
             if isinstance(t[1], aesara.compile.SharedVariable)
-        )
+        ]
+
     elif params is None:
         return []
     else:
@@ -729,17 +725,16 @@ class Group(WithMemoization):
         return cls.__name_registry[name.lower()]
 
     def __new__(cls, group=None, vfam=None, params=None, *args, **kwargs):
-        if cls is Group:
-            if vfam is not None and params is not None:
-                raise TypeError("Cannot call Group with both `vfam` and `params` provided")
-            elif vfam is not None:
-                return super().__new__(cls.group_for_short_name(vfam))
-            elif params is not None:
-                return super().__new__(cls.group_for_params(params))
-            else:
-                raise TypeError("Need to call Group with either `vfam` or `params` provided")
-        else:
+        if cls is not Group:
             return super().__new__(cls)
+        if vfam is not None and params is not None:
+            raise TypeError("Cannot call Group with both `vfam` and `params` provided")
+        elif vfam is not None:
+            return super().__new__(cls.group_for_short_name(vfam))
+        elif params is not None:
+            return super().__new__(cls.group_for_params(params))
+        else:
+            raise TypeError("Need to call Group with either `vfam` or `params` provided")
 
     def __init__(
         self,
@@ -754,7 +749,7 @@ class Group(WithMemoization):
         if isinstance(vfam, str):
             vfam = vfam.lower()
         if options is None:
-            options = dict()
+            options = {}
         self.options = options
         self._vfam = vfam
         self.rng = np.random.default_rng(random_seed)
@@ -787,10 +782,10 @@ class Group(WithMemoization):
 
     @classmethod
     def get_param_spec_for(cls, **kwargs):
-        res = dict()
-        for name, fshape in cls.__param_spec__.items():
-            res[name] = tuple(eval(s, kwargs) for s in fshape)
-        return res
+        return {
+            name: tuple(eval(s, kwargs) for s in fshape)
+            for name, fshape in cls.__param_spec__.items()
+        }
 
     def _check_user_params(self, **kwargs):
         R"""*Dev* - checks user params, allocates them if they are correct, returns True.
@@ -818,7 +813,7 @@ class Group(WithMemoization):
                     givens=givens, needed=needed
                 )
             )
-        self._user_params = dict()
+        self._user_params = {}
         spec = self.get_param_spec_for(d=self.ddim, **kwargs.pop("spec_kw", {}))
         for name, param in self.user_params.items():
             shape = spec[name]
@@ -859,9 +854,10 @@ class Group(WithMemoization):
             # delayed init
             self.group = group
         self.symbolic_initial = self._initial_type(
-            self.__class__.__name__ + "_symbolic_initial_tensor"
+            f"{self.__class__.__name__}_symbolic_initial_tensor"
         )
-        self.input = self._input_type(self.__class__.__name__ + "_symbolic_input")
+
+        self.input = self._input_type(f"{self.__class__.__name__}_symbolic_input")
         # I do some staff that is not supported by standard __init__
         # so I have to to it by myself
 
@@ -880,7 +876,7 @@ class Group(WithMemoization):
             size = test_var.size
             dtype = test_var.dtype
             vr = self.input[..., start_idx : start_idx + size].reshape(shape).astype(dtype)
-            vr.name = value_var.name + "_vi_replacement"
+            vr.name = f"{value_var.name}_vi_replacement"
             self.replacements[value_var] = vr
             self.ordering[value_var.name] = (
                 value_var.name,
@@ -897,10 +893,7 @@ class Group(WithMemoization):
     @property
     def params_dict(self):
         # prefixed are correctly reshaped
-        if self._user_params is not None:
-            return self._user_params
-        else:
-            return self.shared_params
+        return self.shared_params if self._user_params is None else self._user_params
 
     @property
     def params(self):
@@ -970,16 +963,15 @@ class Group(WithMemoization):
         dim = at.as_tensor(dim)
         size = at.as_tensor(size)
         shape = self._new_initial_shape(size, dim, more_replacements)
-        # apply optimizations if possible
         if not isinstance(deterministic, Variable):
-            if deterministic:
-                return at.ones(shape, dtype) * dist_map
-            else:
-                return getattr(self._rng, dist_name)(size=shape)
-        else:
-            sample = getattr(self._rng, dist_name)(size=shape)
-            initial = at.switch(deterministic, at.ones(shape, dtype) * dist_map, sample)
-            return initial
+            return (
+                at.ones(shape, dtype) * dist_map
+                if deterministic
+                else getattr(self._rng, dist_name)(size=shape)
+            )
+
+        sample = getattr(self._rng, dist_name)(size=shape)
+        return at.switch(deterministic, at.ones(shape, dtype) * dist_map, sample)
 
     @node_property
     def symbolic_random(self):
@@ -1101,10 +1093,7 @@ class Group(WithMemoization):
         return self.logq / self.symbolic_normalizing_constant
 
     def __str__(self):
-        if self.group is None:
-            shp = "undefined"
-        else:
-            shp = str(self.ddim)
+        shp = "undefined" if self.group is None else str(self.ddim)
         return f"{self.__class__.__name__}[{shp}]"
 
     @node_property
@@ -1155,7 +1144,7 @@ class Approximation(WithMemoization):
         model = modelcontext(model)
         if not model.free_RVs:
             raise TypeError("Model does not have an free RVs")
-        self.groups = list()
+        self.groups = []
         seen = set()
         rest = None
         for g in groups:
@@ -1169,14 +1158,11 @@ class Approximation(WithMemoization):
                     raise GroupError("Found duplicates in groups")
                 seen.update(g.group)
                 self.groups.append(g)
-        # List iteration to preserve order for reproducibility between runs
-        unseen_free_RVs = [var for var in model.free_RVs if var not in seen]
-        if unseen_free_RVs:
+        if unseen_free_RVs := [var for var in model.free_RVs if var not in seen]:
             if rest is None:
                 raise GroupError("No approximation is specified for the rest variables")
-            else:
-                rest.__init_group__(unseen_free_RVs)
-                self.groups.append(rest)
+            rest.__init_group__(unseen_free_RVs)
+            self.groups.append(rest)
         self.model = model
 
     @property
@@ -1450,7 +1436,7 @@ class Approximation(WithMemoization):
             if name in vars_names(vars_):
                 name_, slc, shape, dtype = ordering[name]
                 found = random[..., slc].reshape((random.shape[0],) + shape).astype(dtype)
-                found.name = name + "_vi_random_slice"
+                found.name = f"{name}_vi_random_slice"
                 break
         else:
             raise KeyError("%r not found" % name)
@@ -1470,7 +1456,7 @@ class Approximation(WithMemoization):
                 reseed_rngs(rng_nodes, random_seed)
             _samples = sample_fn(draws)
 
-            return {v_: s_ for v_, s_ in zip(names, _samples)}
+            return dict(zip(names, _samples))
 
         return inner
 
@@ -1513,10 +1499,11 @@ class Approximation(WithMemoization):
             trace.close()
 
         trace = pm.sampling.MultiTrace([trace])
-        if not return_inferencedata:
-            return trace
-        else:
-            return pm.to_inference_data(trace, model=self.model, **kwargs)
+        return (
+            pm.to_inference_data(trace, model=self.model, **kwargs)
+            if return_inferencedata
+            else trace
+        )
 
     @property
     def ndim(self):
@@ -1533,9 +1520,8 @@ class Approximation(WithMemoization):
     def __str__(self):
         if len(self.groups) < 5:
             return "Approximation{" + " & ".join(map(str, self.groups)) + "}"
-        else:
-            forprint = self.groups[:2] + ["..."] + self.groups[-2:]
-            return "Approximation{" + " & ".join(map(str, forprint)) + "}"
+        forprint = self.groups[:2] + ["..."] + self.groups[-2:]
+        return "Approximation{" + " & ".join(map(str, forprint)) + "}"
 
     @property
     def all_histograms(self):

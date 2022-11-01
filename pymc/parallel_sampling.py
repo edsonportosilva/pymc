@@ -109,12 +109,12 @@ class _Process:
         self._tune = tune
 
     def _unpickle_step_method(self):
-        unpickle_error = (
-            "The model could not be unpickled. This is required for sampling "
-            "with more than one core and multiprocessing context spawn "
-            "or forkserver."
-        )
         if self._step_method_is_pickled:
+            unpickle_error = (
+                "The model could not be unpickled. This is required for sampling "
+                "with more than one core and multiprocessing context spawn "
+                "or forkserver."
+            )
             try:
                 self._step_method = cloudpickle.loads(self._step_method)
             except Exception:
@@ -145,11 +145,10 @@ class _Process:
                 break
 
     def _make_numpy_refs(self):
-        point = {}
-        # XXX: I'm assuming that the processes are properly synchronized...
-        for name, (array, shape, dtype) in self._shared_point.items():
-            point[name] = np.frombuffer(array, dtype).reshape(shape)
-        return point
+        return {
+            name: np.frombuffer(array, dtype).reshape(shape)
+            for name, (array, shape, dtype) in self._shared_point.items()
+        }
 
     def _write_point(self, point):
         # XXX: What do we do when the underlying points change shape?
@@ -170,37 +169,33 @@ class _Process:
         if msg[0] == "abort":
             raise KeyboardInterrupt()
         if msg[0] != "start":
-            raise ValueError("Unexpected msg " + msg[0])
+            raise ValueError(f"Unexpected msg {msg[0]}")
 
         while True:
             if draw == self._tune:
                 self._step_method.stop_tuning()
                 tuning = False
 
-            if draw < self._draws + self._tune:
-                try:
-                    point, stats = self._compute_point()
-                except SamplingError as e:
-                    warns = self._collect_warnings()
-                    e = ExceptionWithTraceback(e, e.__traceback__)
-                    self._msg_pipe.send(("error", warns, e))
-            else:
+            if draw >= self._draws + self._tune:
                 return
 
+            try:
+                point, stats = self._compute_point()
+            except SamplingError as e:
+                warns = self._collect_warnings()
+                e = ExceptionWithTraceback(e, e.__traceback__)
+                self._msg_pipe.send(("error", warns, e))
             msg = self._recv_msg()
             if msg[0] == "abort":
                 raise KeyboardInterrupt()
             elif msg[0] == "write_next":
                 self._write_point(point)
                 is_last = draw + 1 == self._draws + self._tune
-                if is_last:
-                    warns = self._collect_warnings()
-                else:
-                    warns = None
+                warns = self._collect_warnings() if is_last else None
                 self._msg_pipe.send(("writing_done", is_last, draw, tuning, stats, warns))
                 draw += 1
             else:
-                raise ValueError("Unknown message " + msg[0])
+                raise ValueError(f"Unknown message {msg[0]}")
 
     def _compute_point(self):
         if self._step_method.generates_stats:
@@ -236,7 +231,7 @@ class ProcessAdapter:
         mp_ctx,
     ):
         self.chain = chain
-        process_name = "worker_chain_%s" % chain
+        process_name = f"worker_chain_{chain}"
         self._msg_pipe, remote_conn = multiprocessing.Pipe()
 
         self._shared_point = {}
@@ -248,7 +243,7 @@ class ProcessAdapter:
                 size *= int(dim)
             size *= dtype.itemsize
             if size != ctypes.c_size_t(size).value:
-                raise ValueError("Variable %s is too large" % name)
+                raise ValueError(f"Variable {name} is too large")
 
             array = mp_ctx.RawArray("c", size)
             self._shared_point[name] = (array, shape, dtype)
@@ -261,11 +256,11 @@ class ProcessAdapter:
 
         if step_method_pickled is not None:
             step_method_send = step_method_pickled
+        elif mp_ctx.get_start_method() == "spawn":
+            raise ValueError(
+                "please provide a pre-pickled step method when multiprocessing start method is 'spawn'"
+            )
         else:
-            if mp_ctx.get_start_method() == "spawn":
-                raise ValueError(
-                    "please provide a pre-pickled step method when multiprocessing start method is 'spawn'"
-                )
             step_method_send = step_method
 
         self._process = mp_ctx.Process(
@@ -312,7 +307,7 @@ class ProcessAdapter:
                 if warns is not None:
                     error = ParallelSamplingError(str(old_error), self.chain, warns)
                 else:
-                    error = RuntimeError("Chain %s failed." % self.chain)
+                    error = RuntimeError(f"Chain {self.chain} failed.")
                 raise error from old_error
             raise
 
@@ -349,7 +344,7 @@ class ProcessAdapter:
             if warns is not None:
                 error = ParallelSamplingError(str(old_error), proc.chain, warns)
             else:
-                error = RuntimeError("Chain %s failed." % proc.chain)
+                error = RuntimeError(f"Chain {proc.chain} failed.")
             raise error from old_error
         elif msg[0] == "writing_done":
             proc._readable = True
@@ -402,7 +397,7 @@ class ParallelSampler:
     ):
 
         if any(len(arg) != chains for arg in [seeds, start_points]):
-            raise ValueError("Number of seeds and start_points must be %s." % chains)
+            raise ValueError(f"Number of seeds and start_points must be {chains}.")
 
         if mp_ctx is None or isinstance(mp_ctx, str):
             # Closes issue https://github.com/pymc-devs/pymc/issues/3849
