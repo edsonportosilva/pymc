@@ -63,7 +63,7 @@ def replace_with_values(vars_needed, replacements=None, model=None):
             input_names.append(rv.name)
 
     # Then it's deterministic, no inputs are required, can eval and return
-    if len(inputs) == 0:
+    if not inputs:
         return tuple(v.eval() for v in vars_needed)
 
     fn = compile_pymc(
@@ -125,11 +125,9 @@ def kmeans_inducing_points(n_inducing, X, **kmeans_kwargs):
         X = np.asarray(X)
     else:
         raise TypeError(
-            "To use K-means initialization, "
-            "please provide X as a type that "
-            "can be cast to np.ndarray, instead "
-            "of {}".format(type(X))
+            f"To use K-means initialization, please provide X as a type that can be cast to np.ndarray, instead of {type(X)}"
         )
+
     scaling = np.std(X, 0)
     # if std of a column is very small (zero), don't normalize that column
     scaling[scaling <= 1e-6] = 1.0
@@ -168,8 +166,8 @@ def conditioned_vars(varnames):
             return setter
 
         for name in varnames:
-            getter = make_getter("_" + name)
-            setter = make_setter("_" + name)
+            getter = make_getter(f"_{name}")
+            setter = make_setter(f"_{name}")
             setattr(cls, name, property(getter, setter))
         return cls
 

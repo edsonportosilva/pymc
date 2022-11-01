@@ -96,33 +96,15 @@ def convert_observed_data(data):
         # typically, but not limited to pandas objects
         vals = data.to_numpy()
         null_data = data.isnull()
-        if hasattr(null_data, "to_numpy"):
-            # pandas Series
-            mask = null_data.to_numpy()
-        else:
-            # pandas Index
-            mask = null_data
-        if mask.any():
-            # there are missing values
-            ret = np.ma.MaskedArray(vals, mask)
-        else:
-            ret = vals
+        mask = null_data.to_numpy() if hasattr(null_data, "to_numpy") else null_data
+        ret = np.ma.MaskedArray(vals, mask) if mask.any() else vals
     elif isinstance(data, np.ndarray):
         if isinstance(data, np.ma.MaskedArray):
-            if not data.mask.any():
-                # empty mask
-                ret = data.filled()
-            else:
-                # already masked and rightly so
-                ret = data
+            ret = data if data.mask.any() else data.filled()
         else:
             # already a ndarray, but not masked
             mask = np.isnan(data)
-            if np.any(mask):
-                ret = np.ma.MaskedArray(data, mask)
-            else:
-                # no masking required
-                ret = data
+            ret = np.ma.MaskedArray(data, mask) if np.any(mask) else data
     elif isinstance(data, Variable):
         ret = data
     elif sps.issparse(data):
@@ -133,13 +115,8 @@ def convert_observed_data(data):
         ret = np.asarray(data)
 
     # type handling to enable index variables when data is int:
-    if hasattr(data, "dtype"):
-        if "int" in str(data.dtype):
-            return intX(ret)
-        # otherwise, assume float:
-        else:
-            return floatX(ret)
-    # needed for uses of this function other than with pm.Data:
+    if hasattr(data, "dtype") and "int" in str(data.dtype):
+        return intX(ret)
     else:
         return floatX(ret)
 
@@ -334,7 +311,7 @@ def replace_rvs_in_graphs(
 
     if replacements:
         inputs = [i for i in graph_inputs(graphs) if not isinstance(i, Constant)]
-        equiv = {k: k for k in replacements.keys()}
+        equiv = {k: k for k in replacements}
         equiv = clone_get_equiv(inputs, graphs, False, False, equiv)
 
         fg = FunctionGraph(
@@ -378,17 +355,14 @@ def rvs_to_value_vars(
         rv_var, rv_value_var = extract_rv_and_value_vars(var)
 
         if rv_value_var is None:
-            # If RandomVariable does not have a value_var and corresponds to
-            # a NoDistribution, we allow further replacements in upstream graph
             if isinstance(rv_var.owner.op, NoDistribution):
                 return rv_var.owner.inputs
 
-            else:
-                warnings.warn(
-                    f"No value variable found for {rv_var}; "
-                    "the random variable will not be replaced."
-                )
-                return []
+            warnings.warn(
+                f"No value variable found for {rv_var}; "
+                "the random variable will not be replaced."
+            )
+            return []
 
         transform = getattr(rv_value_var.tag, "transform", None)
 
@@ -569,10 +543,7 @@ def hessian_diag(f, vars=None):
 
 
 def makeiter(a):
-    if isinstance(a, (tuple, list)):
-        return a
-    else:
-        return [a]
+    return a if isinstance(a, (tuple, list)) else [a]
 
 
 class IdentityOp(scalar.UnaryScalarOp):
@@ -671,7 +642,7 @@ def join_nonshared_inputs(
         replace[var] = reshape_t(inarray[last_idx : last_idx + arr_len], shape).astype(var.dtype)
         last_idx += arr_len
 
-    replace.update(shared)
+    replace |= shared
 
     xs_special = [aesara.clone_replace(x, replace, rebuild_strict=False) for x in xs]
     return xs_special, inarray
@@ -679,10 +650,7 @@ def join_nonshared_inputs(
 
 def reshape_t(x, shape):
     """Work around fact that x.reshape(()) doesn't work"""
-    if shape != ():
-        return x.reshape(shape)
-    else:
-        return x[0]
+    return x.reshape(shape) if shape != () else x[0]
 
 
 class PointFunc:
@@ -764,7 +732,7 @@ class GeneratorOp(Op):
 
         if not isinstance(gen, GeneratorAdapter):
             gen = GeneratorAdapter(gen)
-        if not gen.tensortype == self.generator.tensortype:
+        if gen.tensortype != self.generator.tensortype:
             raise ValueError("New generator should yield the same type")
         self.generator = gen
 
@@ -775,7 +743,7 @@ class GeneratorOp(Op):
             value = np.asarray(value, self.generator.tensortype.dtype)
             t1 = (False,) * value.ndim
             t2 = self.generator.tensortype.broadcastable
-            if not t1 == t2:
+            if t1 != t2:
                 raise ValueError("Default value should have the same type as generator")
             self.default = value
 
@@ -821,11 +789,7 @@ def at_rng(random_seed=None):
         `aesara.tensor.random.utils.RandomStream`
         instance passed to the most recent call of `set_at_rng`
     """
-    if random_seed is None:
-        return _at_rng
-    else:
-        ret = RandomStream(random_seed)
-        return ret
+    return _at_rng if random_seed is None else RandomStream(random_seed)
 
 
 def set_at_rng(new_rng):
@@ -1003,14 +967,16 @@ def compile_pymc(
         assert random_var.owner.op is not None
         if isinstance(random_var.owner.op, RandomVariable):
             rng = random_var.owner.inputs[0]
-            if not hasattr(rng, "default_update"):
-                rng_updates[rng] = random_var.owner.outputs[0]
-            else:
-                rng_updates[rng] = rng.default_update
+            rng_updates[rng] = (
+                rng.default_update
+                if hasattr(rng, "default_update")
+                else random_var.owner.outputs[0]
+            )
+
         else:
             update_fn = getattr(random_var.owner.op, "update", None)
             if update_fn is not None:
-                rng_updates.update(update_fn(random_var.owner))
+                rng_updates |= update_fn(random_var.owner)
 
     # We always reseed random variables as this provides RNGs with no chances of collision
     if rng_updates:
@@ -1031,11 +997,10 @@ def compile_pymc(
     mode = get_mode(mode)
     opt_qry = mode.provided_optimizer.including("random_make_inplace", check_parameter_opt)
     mode = Mode(linker=mode.linker, optimizer=opt_qry)
-    aesara_function = aesara.function(
+    return aesara.function(
         inputs,
         outputs,
         updates={**rng_updates, **kwargs.pop("updates", {})},
         mode=mode,
         **kwargs,
     )
-    return aesara_function

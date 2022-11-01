@@ -74,13 +74,11 @@ class Inference:
                 "does not return loss. Ignoring `score` argument" % self.objective.op
             )
             score = False
-        else:
-            pass
         return score
 
     def run_profiling(self, n=1000, score=None, **kwargs):
         score = self._maybe_score(score)
-        fn_kwargs = kwargs.pop("fn_kwargs", dict())
+        fn_kwargs = kwargs.pop("fn_kwargs", {})
         fn_kwargs["profile"] = True
         step_func = self.objective.step_function(score=score, fn_kwargs=fn_kwargs, **kwargs)
         progress = progress_bar(range(n))
@@ -162,8 +160,7 @@ class Inference:
                     tmp_hold = list(range(current_param.size))
                     for varname, slice_info in self.approx.groups[0].ordering.items():
                         slclen = len(tmp_hold[slice_info[1]])
-                        for j in range(slclen):
-                            name_slc.append((varname, j))
+                        name_slc.extend((varname, j) for j in range(slclen))
                     index = np.where(np.isnan(current_param))[0]
                     errmsg = ["NaN occurred in optimization. "]
                     suggest_solution = (
@@ -171,11 +168,12 @@ class Inference:
                         "http://docs.pymc.io/notebooks/variational_api_quickstart.html#Tracking-parameters"
                     )
                     try:
-                        for ii in index:
-                            errmsg.append(
-                                "The current approximation of RV `{}`.ravel()[{}]"
-                                " is NaN.".format(*name_slc[ii])
-                            )
+                        errmsg.extend(
+                            "The current approximation of RV `{}`.ravel()[{}]"
+                            " is NaN.".format(*name_slc[ii])
+                            for ii in index
+                        )
+
                         errmsg.append(suggest_solution)
                     except IndexError:
                         pass
@@ -191,10 +189,7 @@ class Inference:
         def _infmean(input_array):
             """Return the mean of the finite values of the array"""
             input_array = input_array[np.isfinite(input_array)].astype("float64")
-            if len(input_array) == 0:
-                return np.nan
-            else:
-                return np.mean(input_array)
+            return np.nan if len(input_array) == 0 else np.mean(input_array)
 
         scores = np.empty(n)
         scores[:] = np.nan
@@ -720,10 +715,7 @@ def fit(
     -------
     :class:`Approximation`
     """
-    if inf_kwargs is None:
-        inf_kwargs = dict()
-    else:
-        inf_kwargs = inf_kwargs.copy()
+    inf_kwargs = {} if inf_kwargs is None else inf_kwargs.copy()
     if random_seed is not None:
         inf_kwargs["random_seed"] = random_seed
     if start is not None:

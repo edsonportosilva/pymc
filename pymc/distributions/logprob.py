@@ -63,10 +63,7 @@ def _get_scaling(
     if total_size is None:
         coef = 1.0
     elif isinstance(total_size, int):
-        if ndim >= 1:
-            denom = shape[0]
-        else:
-            denom = 1
+        denom = shape[0] if ndim >= 1 else 1
         coef = floatX(total_size) / floatX(denom)
     elif isinstance(total_size, (list, tuple)):
         if not all(isinstance(i, int) for i in total_size if (i is not Ellipsis and i is not None)):
@@ -92,10 +89,7 @@ def _get_scaling(
             )
         elif (len(begin) + len(end)) == 0:
             coef = 1.0
-        if len(end) > 0:
-            shp_end = shape[-len(end) :]
-        else:
-            shp_end = np.asarray([])
+        shp_end = shape[-len(end) :] if len(end) > 0 else np.asarray([])
         shp_begin = shape[: len(begin)]
         begin_coef = [
             floatX(t) / floatX(shp_begin[i]) for i, t in enumerate(begin) if t is not None
@@ -192,11 +186,14 @@ def joint_logp(
             raise ValueError("rv_values must be a dict if more than one var is requested")
 
     if scaling:
-        rv_scalings = {}
-        for rv, value_var in rv_values.items():
-            rv_scalings[value_var] = _get_scaling(
-                getattr(rv.tag, "total_size", None), value_var.shape, value_var.ndim
+        rv_scalings = {
+            value_var: _get_scaling(
+                getattr(rv.tag, "total_size", None),
+                value_var.shape,
+                value_var.ndim,
             )
+            for rv, value_var in rv_values.items()
+        }
 
     # Aeppl needs all rv-values pairs, not just that of the requested var.
     # Hence we iterate through the graph to collect them.
@@ -243,7 +240,7 @@ def joint_logp(
     # Only SimulatorRVs are allowed
     from pymc.distributions.simulator import SimulatorRV
 
-    unexpected_rv_nodes = [
+    if unexpected_rv_nodes := [
         node
         for node in aesara.graph.ancestors(list(temp_logp_var_dict.values()))
         if (
@@ -251,8 +248,7 @@ def joint_logp(
             and isinstance(node.owner.op, RandomVariable)
             and not isinstance(node.owner.op, SimulatorRV)
         )
-    ]
-    if unexpected_rv_nodes:
+    ]:
         raise ValueError(
             f"Random variables detected in the logp graph: {unexpected_rv_nodes}.\n"
             "This can happen when DensityDist logp or Interval transform functions "
@@ -262,21 +258,21 @@ def joint_logp(
     # aeppl returns the logp for every single value term we provided to it. This includes
     # the extra values we plugged in above, so we filter those we actually wanted in the
     # same order they were given in.
-    logp_var_dict = {}
-    for value_var in rv_values.values():
-        logp_var_dict[value_var] = temp_logp_var_dict[value_var]
+    logp_var_dict = {
+        value_var: temp_logp_var_dict[value_var]
+        for value_var in rv_values.values()
+    }
 
     if scaling:
-        for value_var in logp_var_dict.keys():
+        for value_var, value in logp_var_dict.items():
             if value_var in rv_scalings:
-                logp_var_dict[value_var] *= rv_scalings[value_var]
+                value *= rv_scalings[value_var]
 
-    if sum:
-        logp_var = at.sum([at.sum(factor) for factor in logp_var_dict.values()])
-    else:
-        logp_var = list(logp_var_dict.values())
-
-    return logp_var
+    return (
+        at.sum([at.sum(factor) for factor in logp_var_dict.values()])
+        if sum
+        else list(logp_var_dict.values())
+    )
 
 
 def logp(rv: TensorVariable, value) -> TensorVariable:

@@ -76,10 +76,10 @@ def test_get_steps(info_source, steps, shape, step_shape_offset, expected_steps,
     elif info_source == "observed":
         if shape is None:
             observed = None
+        elif ... in shape:
+            # There is no equivalent to implied dims in observed
+            return
         else:
-            if ... in shape:
-                # There is no equivalent to implied dims in observed
-                return
             observed = np.zeros(shape)
         inferred_steps = get_steps(
             steps=steps, observed=observed, step_shape_offset=step_shape_offset
@@ -87,13 +87,12 @@ def test_get_steps(info_source, steps, shape, step_shape_offset, expected_steps,
 
     if not isinstance(inferred_steps, TensorVariable):
         assert inferred_steps == expected_steps
+    elif consistent:
+        assert inferred_steps.eval() == expected_steps
     else:
-        if consistent:
-            assert inferred_steps.eval() == expected_steps
-        else:
-            assert inferred_steps.owner.inputs[0].eval() == expected_steps
-            with pytest.raises(AssertionError, match="Steps do not match"):
-                inferred_steps.eval()
+        assert inferred_steps.owner.inputs[0].eval() == expected_steps
+        with pytest.raises(AssertionError, match="Steps do not match"):
+            inferred_steps.eval()
 
 
 class TestGaussianRandomWalk:
@@ -154,13 +153,13 @@ class TestGaussianRandomWalk:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", "Initial distribution not specified.*", UserWarning)
             grw = pm.GaussianRandomWalk.dist(mu=0, sigma=1, steps=1, init_dist=init)
-            assert tuple(grw.owner.inputs[-2].shape.eval()) == ()
+            assert not tuple(grw.owner.inputs[-2].shape.eval())
 
             grw = pm.GaussianRandomWalk.dist(mu=0, sigma=1, steps=1, init_dist=init, size=(5,))
             assert tuple(grw.owner.inputs[-2].shape.eval()) == (5,)
 
             grw = pm.GaussianRandomWalk.dist(mu=0, sigma=1, steps=1, init_dist=init, shape=2)
-            assert tuple(grw.owner.inputs[-2].shape.eval()) == ()
+            assert not tuple(grw.owner.inputs[-2].shape.eval())
 
             grw = pm.GaussianRandomWalk.dist(mu=0, sigma=1, steps=1, init_dist=init, shape=(5, 2))
             assert tuple(grw.owner.inputs[-2].shape.eval()) == (5,)
@@ -577,6 +576,6 @@ def test_linear():
 
     p95 = [2.5, 97.5]
     lo, hi = np.percentile(trace[lamh], p95, axis=0)
-    assert (lo < lam) and (lam < hi)
+    assert lo < lam < hi
     lo, hi = np.percentile(ppc["zh"], p95, axis=0)
     assert ((lo < z) * (z < hi)).mean() > 0.95

@@ -194,11 +194,10 @@ class EmpiricalGroup(Group):
         if trace is None:
             if size is None:
                 raise opvi.ParametrizationError("Need `trace` or `size` to initialize")
-            else:
-                start = self._prepare_start(start)
-                # Initialize particles
-                histogram = np.tile(start, (size, 1))
-                histogram += pm.floatX(np.random.normal(0, jitter, histogram.shape))
+            start = self._prepare_start(start)
+            # Initialize particles
+            histogram = np.tile(start, (size, 1))
+            histogram += pm.floatX(np.random.normal(0, jitter, histogram.shape))
         else:
             histogram = np.empty((len(trace) * len(trace.chains), self.ddim))
             i = 0
@@ -216,8 +215,9 @@ class EmpiricalGroup(Group):
                 " Pass `pm.sample(return_inferencedata=False)` to get a `MultiTrace` to use with `Empirical`."
                 " Please help us to refactor: https://github.com/pymc-devs/pymc/issues/5884"
             )
-        elif trace is not None and not all(
-            [self.model.rvs_to_values[var].name in trace.varnames for var in self.group]
+        elif trace is not None and any(
+            self.model.rvs_to_values[var].name not in trace.varnames
+            for var in self.group
         ):
             raise ValueError("trace has not all free RVs in the group")
 
@@ -229,8 +229,6 @@ class EmpiricalGroup(Group):
                 size = size[None]
             elif size.ndim > 1:
                 raise ValueError("size ndim should be no more than 1d")
-            else:
-                pass
         else:
             size = tuple(np.atleast_1d(size))
         return self._rng.uniform(
@@ -248,14 +246,12 @@ class EmpiricalGroup(Group):
                 at.repeat(self.mean.reshape((1, -1)), size, -1),
                 self.histogram[self.randidx(size)],
             )
+        if deterministic:
+            raise NotImplementedInference(
+                "Deterministic sampling from a Histogram is broken in v4"
+            )
         else:
-            if deterministic:
-                raise NotImplementedInference(
-                    "Deterministic sampling from a Histogram is broken in v4"
-                )
-                return at.repeat(self.mean.reshape((1, -1)), size, -1)
-            else:
-                return self.histogram[self.randidx(size)]
+            return self.histogram[self.randidx(size)]
 
     @property
     def symbolic_random(self):
@@ -282,7 +278,7 @@ class EmpiricalGroup(Group):
         if isinstance(self.histogram, aesara.compile.SharedVariable):
             shp = ", ".join(map(str, self.histogram.shape.eval()))
         else:
-            shp = "None, " + str(self.ddim)
+            shp = f"None, {str(self.ddim)}"
         return f"{self.__class__.__name__}[{shp}]"
 
 

@@ -188,7 +188,6 @@ def sample_smc(
             f"random_seed should be a non-negative integer or None, got: {random_seed}"
             "This will raise a ValueError in the Future"
         )
-        random_seed = None
     if isinstance(random_seed, int) or random_seed is None:
         rng = np.random.default_rng(seed=random_seed)
         random_seed = list(rng.integers(2**30, size=chains))
@@ -264,11 +263,8 @@ def _save_sample_stats(
     sample_stats_dict = sample_stats[0]
 
     if chains > 1:
-        # Collect the stat values from each chain in a single list
-        for stat in sample_stats[0].keys():
-            value_list = []
-            for chain_sample_stats in sample_stats:
-                value_list.append(chain_sample_stats[stat])
+        for stat in sample_stats_dict.keys():
+            value_list = [chain_sample_stats[stat] for chain_sample_stats in sample_stats]
             sample_stats_dict[stat] = value_list
 
     if not return_inferencedata:
@@ -295,7 +291,7 @@ def _save_sample_stats(
 
         ikwargs = dict(model=model)
         if idata_kwargs is not None:
-            ikwargs.update(idata_kwargs)
+            ikwargs |= idata_kwargs
         idata = to_inference_data(trace, **ikwargs)
         idata = InferenceData(**idata, sample_stats=sample_stats)
 

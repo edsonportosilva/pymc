@@ -246,7 +246,7 @@ def make_initial_point_expression(
     initial_values_transformed = []
 
     for variable in free_rvs:
-        strategy = initval_strategies.get(variable, None)
+        strategy = initval_strategies.get(variable)
 
         if strategy is None:
             strategy = default_strategy
@@ -313,9 +313,8 @@ def make_initial_point_expression(
     replacements = reversed(list(zip(free_rvs_clone, initial_values_clone)))
     graph.replace_all(replacements, import_missing=True)
 
-    if not return_transformed:
-        return graph.outputs
-    # Because the unconstrained (transformed) expressions are a subgraph of the
-    # constrained initial point they were also automatically updated inplace
-    # when calling graph.replace_all above, so we don't need to do anything else
-    return initial_values_transformed_clone
+    return (
+        initial_values_transformed_clone
+        if return_transformed
+        else graph.outputs
+    )

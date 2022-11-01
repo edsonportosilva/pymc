@@ -44,13 +44,13 @@ def str_for_dist(rv: TensorVariable, formatting: str = "plain", include_params: 
         print_name = r"\text{" + _latex_escape(print_name) + "}"
         dist_name = rv.owner.op._print_name[1]
         if include_params:
-            return r"${} \sim {}({})$".format(print_name, dist_name, ",~".join(dist_args))
+            return f'${print_name} \sim {dist_name}({",~".join(dist_args)})$'
         else:
             return rf"${print_name} \sim {dist_name}$"
     else:  # plain
         dist_name = rv.owner.op._print_name[0]
         if include_params:
-            return r"{} ~ {}({})".format(print_name, dist_name, ", ".join(dist_args))
+            return f'{print_name} ~ {dist_name}({", ".join(dist_args)})'
         else:
             return rf"{print_name} ~ {dist_name}"
 
@@ -111,17 +111,18 @@ def str_for_potential_or_deterministic(
     """Make a human-readable string representation of a Deterministic or Potential in a model, either
     LaTeX or plain, optionally with distribution parameter values included."""
     print_name = var.name if var.name is not None else "<unnamed>"
-    if "latex" in formatting:
-        print_name = r"\text{" + _latex_escape(print_name) + "}"
-        if include_params:
-            return rf"${print_name} \sim \operatorname{{{dist_name}}}({_str_for_expression(var, formatting=formatting)})$"
-        else:
-            return rf"${print_name} \sim \operatorname{{{dist_name}}}$"
-    else:  # plain
-        if include_params:
-            return rf"{print_name} ~ {dist_name}({_str_for_expression(var, formatting=formatting)})"
-        else:
-            return rf"{print_name} ~ {dist_name}"
+    if "latex" not in formatting:
+        return (
+            f"{print_name} ~ {dist_name}({_str_for_expression(var, formatting=formatting)})"
+            if include_params
+            else f"{print_name} ~ {dist_name}"
+        )
+
+    print_name = r"\text{" + _latex_escape(print_name) + "}"
+    if include_params:
+        return rf"${print_name} \sim \operatorname{{{dist_name}}}({_str_for_expression(var, formatting=formatting)})$"
+    else:
+        return rf"${print_name} \sim \operatorname{{{dist_name}}}$"
 
 
 def _str_for_input_var(var: Variable, formatting: str) -> str:
@@ -146,10 +147,7 @@ def _str_for_input_var(var: Variable, formatting: str) -> str:
 
 def _str_for_input_rv(var: Variable, formatting: str) -> str:
     _str = var.name if var.name is not None else "<unnamed>"
-    if "latex" in formatting:
-        return r"\text{" + _latex_escape(_str) + "}"
-    else:
-        return _str
+    return r"\text{" + _latex_escape(_str) + "}" if "latex" in formatting else _str
 
 
 def _str_for_constant(var: TensorConstant, formatting: str) -> str:

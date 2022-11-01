@@ -133,7 +133,7 @@ def test_joint_logp_basic():
     ]
 
     # There shouldn't be any `RandomVariable`s in the resulting graph
-    assert len(res_rv_ancestors) == 0
+    assert not res_rv_ancestors
     assert b_value_var in res_ancestors
     assert c_value_var in res_ancestors
     assert a_value_var in res_ancestors
@@ -221,7 +221,7 @@ def test_joint_logp_subtensor():
 
     decimals = select_by_precision(float64=6, float32=4)
 
-    for i in range(10):
+    for _ in range(10):
         bern_sp = sp.bernoulli(p)
         I_value = bern_sp.rvs(size=size).astype(I_rv.dtype)
 

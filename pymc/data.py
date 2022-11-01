@@ -107,11 +107,10 @@ class GeneratorAdapter:
 
     # python3 generator
     def __next__(self):
-        if not self._yielded_test_value:
-            self._yielded_test_value = True
-            return self.test_value
-        else:
+        if self._yielded_test_value:
             return pm.smartfloatX(copy(next(self.gen)))
+        self._yielded_test_value = True
+        return self.test_value
 
     # python2 generator
     next = __next__
@@ -359,16 +358,19 @@ class Minibatch(TensorVariable):
         elif isinstance(user_size, int):
             return slice(None, user_size)
         elif isinstance(user_size, (list, tuple)):
-            slc = list()
+            slc = []
             for i in user_size:
-                if isinstance(i, int):
+                if (
+                    isinstance(i, int)
+                    or i is not None
+                    and i is not Ellipsis
+                    and isinstance(i, slice)
+                ):
                     slc.append(i)
                 elif i is None:
                     slc.append(slice(None))
                 elif i is Ellipsis:
                     slc.append(Ellipsis)
-                elif isinstance(i, slice):
-                    slc.append(i)
                 else:
                     raise TypeError("Unrecognized size type, %r" % user_size)
             return slc
@@ -385,16 +387,17 @@ class Minibatch(TensorVariable):
             def check(t):
                 if t is Ellipsis or t is None:
                     return True
+                if isinstance(t, (tuple, list)):
+                    return (
+                        isinstance(t[0], int) and isinstance(t[1], int)
+                        if len(t) == 2
+                        else False
+                    )
+
+                elif isinstance(t, int):
+                    return True
                 else:
-                    if isinstance(t, (tuple, list)):
-                        if not len(t) == 2:
-                            return False
-                        else:
-                            return isinstance(t[0], int) and isinstance(t[1], int)
-                    elif isinstance(t, int):
-                        return True
-                    else:
-                        return False
+                    return False
 
             # end check definition
             if not all(check(t) for t in batch_size):
@@ -427,10 +430,7 @@ class Minibatch(TensorVariable):
                     "Length of `batch_size` is too big, "
                     "number of ints is bigger that ndim, got %r" % batch_size
                 )
-            if len(end) > 0:
-                shp_end = shape[-len(end) :]
-            else:
-                shp_end = np.asarray([])
+            shp_end = shape[-len(end) :] if len(end) > 0 else np.asarray([])
             shp_begin = shape[: len(begin)]
             slc_begin = [
                 self.rslice(shp_begin[i], t[0], t[1]) if t is not None else at.arange(shp_begin[i])
@@ -495,9 +495,7 @@ def determine_coords(
 
     # If value is a df, we also interpret the columns as coords:
     if hasattr(value, "columns"):
-        dim_name = None
-        if dims is not None:
-            dim_name = dims[1]
+        dim_name = dims[1] if dims is not None else None
         if dim_name is None and value.columns.name is not None:
             dim_name = value.columns.name
         if dim_name is not None:
@@ -683,7 +681,7 @@ def Data(
 
     if isinstance(dims, str):
         dims = (dims,)
-    if not (dims is None or len(dims) == x.ndim):
+    if dims is not None and len(dims) != x.ndim:
         raise pm.exceptions.ShapeError(
             "Length of `dims` must match the dimensions of the dataset.",
             actual=len(dims),
@@ -695,15 +693,10 @@ def Data(
         coords, dims = determine_coords(model, value, dims)
 
     if dims:
-        if not mutable:
-            # Use the dimension lengths from the before it was tensorified.
-            # These can still be tensors, but in many cases they are numeric.
-            xshape = np.shape(arr)
-        else:
-            xshape = x.shape
+        xshape = x.shape if mutable else np.shape(arr)
         # Register new dimension lengths
         for d, dname in enumerate(dims):
-            if not dname in model.dim_lengths:
+            if dname not in model.dim_lengths:
                 model.add_coord(
                     name=dname,
                     # Note: Coordinate values can't be taken from

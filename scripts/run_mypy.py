@@ -110,7 +110,7 @@ def mypy_to_pandas(input_lines: Iterator[str]) -> pandas.DataFrame:
         if len(elems) < 3:
             continue
         try:
-            file, lineno, message_type, *_ = elems[0:3]
+            file, lineno, message_type, *_ = elems[:3]
             message_type = message_type.strip()
             if message_type == "error":
                 current_section = line.split("  [")[-1][:-1]
@@ -138,8 +138,9 @@ def check_no_unexpected_results(mypy_lines: Iterator[str]):
     all_files = {
         str(fp).replace(str(DP_ROOT), "").strip(os.sep).replace(os.sep, "/")
         for fp in DP_ROOT.glob("pymc/**/*.py")
-        if not "tests" in str(fp)
+        if "tests" not in str(fp)
     }
+
     failing = set(df.reset_index().file.str.replace(os.sep, "/", regex=False))
     if not failing.issubset(all_files):
         raise Exception(

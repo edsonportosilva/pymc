@@ -438,14 +438,14 @@ def expand_packed_triangular(n, packed, lower=True, diagonal_only=False):
     if diagonal_only and lower:
         diag_idxs = np.arange(1, n + 1).cumsum() - 1
         return packed[diag_idxs]
-    elif diagonal_only and not lower:
+    elif diagonal_only:
         diag_idxs = np.arange(2, n + 2)[::-1].cumsum() - n - 1
         return packed[diag_idxs]
     elif lower:
         out = at.zeros((n, n), dtype=aesara.config.floatX)
         idxs = np.tril_indices(n)
         return at.set_subtensor(out[idxs], packed)
-    elif not lower:
+    else:
         out = at.zeros((n, n), dtype=aesara.config.floatX)
         idxs = np.triu_indices(n)
         return at.set_subtensor(out[idxs], packed)

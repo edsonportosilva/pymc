@@ -118,13 +118,10 @@ def test_init_groups(three_var_model, raises, grouping):
         inited_groups = [a(group=g) for a, g in zip(approxes, groups)]
         approx = Approximation(inited_groups)
         for ig, g in zip(inited_groups, groups):
-            if g is None:
-                pass
-            else:
+            if g is not None:
                 assert {pm.util.get_transformed(z) for z in g} == set(ig.group)
-        else:
-            model_dim = sum(v.size for v in three_var_model.initial_point(0).values())
-            assert approx.ndim == model_dim
+        model_dim = sum(v.size for v in three_var_model.initial_point(0).values())
+        assert approx.ndim == model_dim
         trace = approx.sample(100)
 
 
@@ -145,16 +142,15 @@ def three_var_groups(request, three_var_model):
         list(map(functools.partial(getattr, three_var_model), g)) if g is not None else None
         for g in groups
     ]
-    inited_groups = [
-        a(group=g, model=three_var_model, **gk) for a, g, gk in zip(approxes, groups, gkwargs)
+    return [
+        a(group=g, model=three_var_model, **gk)
+        for a, g, gk in zip(approxes, groups, gkwargs)
     ]
-    return inited_groups
 
 
 @pytest.fixture
 def three_var_approx(three_var_model, three_var_groups):
-    approx = Approximation(three_var_groups, model=three_var_model)
-    return approx
+    return Approximation(three_var_groups, model=three_var_model)
 
 
 @pytest.fixture
@@ -195,22 +191,23 @@ def three_var_aevb_groups(parametric_grouped_approxes, three_var_model, aevb_ini
     dsize = np.prod(one_initial_value.shape[1:])
     cls, kw = parametric_grouped_approxes
     spec = cls.get_param_spec_for(d=dsize, **kw)
-    params = dict()
-    for k, v in spec.items():
-        if isinstance(k, int):
-            params[k] = dict()
-            for k_i, v_i in v.items():
-                params[k][k_i] = aevb_initial.dot(np.random.rand(7, *v_i).astype("float32"))
-        else:
-            params[k] = aevb_initial.dot(np.random.rand(7, *v).astype("float32"))
+    params = {
+        k: {
+            k_i: aevb_initial.dot(np.random.rand(7, *v_i).astype("float32"))
+            for k_i, v_i in v.items()
+        }
+        if isinstance(k, int)
+        else aevb_initial.dot(np.random.rand(7, *v).astype("float32"))
+        for k, v in spec.items()
+    }
+
     aevb_g = cls([three_var_model.one], params=params, model=three_var_model, local=True)
     return [aevb_g, MeanFieldGroup(None, model=three_var_model)]
 
 
 @pytest.fixture
 def three_var_aevb_approx(three_var_model, three_var_aevb_groups):
-    approx = Approximation(three_var_aevb_groups, model=three_var_model)
-    return approx
+    return Approximation(three_var_aevb_groups, model=three_var_model)
 
 
 def test_logq_mini_1_sample_1_var(parametric_grouped_approxes, three_var_model):
@@ -231,7 +228,7 @@ def test_logq_mini_2_sample_2_var(parametric_grouped_approxes, three_var_model):
 
 def test_logq_globals(three_var_approx):
     if not three_var_approx.has_logq:
-        pytest.skip("%s does not implement logq" % three_var_approx)
+        pytest.skip(f"{three_var_approx} does not implement logq")
     approx = three_var_approx
     logq, symbolic_logq = approx.set_size_and_deterministic(
         [approx.logq, approx.symbolic_logq], 1, 0
@@ -499,16 +496,7 @@ def simple_model(simple_model_data):
     return model
 
 
-@pytest.fixture(
-    scope="module",
-    params=[
-        dict(cls=ADVI, init=dict()),
-        dict(cls=FullRankADVI, init=dict()),
-        dict(cls=SVGD, init=dict(n_particles=500, jitter=1)),
-        dict(cls=ASVGD, init=dict(temperature=1.0)),
-    ],
-    ids=["ADVI", "FullRankADVI", "SVGD", "ASVGD"],
-)
+@pytest.fixture(scope="module", params=[dict(cls=ADVI, init={}), dict(cls=FullRankADVI, init={}), dict(cls=SVGD, init=dict(n_particles=500, jitter=1)), dict(cls=ASVGD, init=dict(temperature=1.0))], ids=["ADVI", "FullRankADVI", "SVGD", "ASVGD"])
 def inference_spec(request):
     cls = request.param["cls"]
     init = request.param["init"]
@@ -627,36 +615,21 @@ def fit_method_with_object(request, another_simple_model):
         return _select[request.param["name"]](**request.param["kw"])
 
 
-@pytest.mark.parametrize(
-    ["method", "kwargs", "error"],
-    [
-        ("undefined", dict(), KeyError),
-        (1, dict(), TypeError),
-        ("advi", dict(total_grad_norm_constraint=10), None),
-        ("fullrank_advi", dict(), None),
-        ("svgd", dict(total_grad_norm_constraint=10), None),
-        ("svgd", dict(start={}), None),
-        # start argument is not allowed for ASVGD
-        ("asvgd", dict(start={}, total_grad_norm_constraint=10), TypeError),
-        ("asvgd", dict(total_grad_norm_constraint=10), None),
-        ("nfvi=bad-formula", dict(start={}), KeyError),
-    ],
-)
+@pytest.mark.parametrize(["method", "kwargs", "error"], [("undefined", {}, KeyError), (1, {}, TypeError), ("advi", dict(total_grad_norm_constraint=10), None), ("fullrank_advi", {}, None), ("svgd", dict(total_grad_norm_constraint=10), None), ("svgd", dict(start={}), None), ("asvgd", dict(start={}, total_grad_norm_constraint=10), TypeError), ("asvgd", dict(total_grad_norm_constraint=10), None), ("nfvi=bad-formula", dict(start={}), KeyError)])
 def test_fit_fn_text(method, kwargs, error, another_simple_model):
     with another_simple_model:
         if method == "asvgd":
             with pytest.warns(UserWarning, match="experimental inference Operator"):
-                if error is not None:
+                if error is None:
+                    fit(10, method=method, **kwargs)
+                else:
                     with pytest.raises(error):
                         fit(10, method=method, **kwargs)
-                else:
-                    fit(10, method=method, **kwargs)
-        else:
-            if error is not None:
-                with pytest.raises(error):
-                    fit(10, method=method, **kwargs)
-            else:
+        elif error is not None:
+            with pytest.raises(error):
                 fit(10, method=method, **kwargs)
+        else:
+            fit(10, method=method, **kwargs)
 
 
 @pytest.fixture(scope="module")

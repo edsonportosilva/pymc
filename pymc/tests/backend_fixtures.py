@@ -70,10 +70,10 @@ class ModelBackendSetupTestCase:
     def test_append(self):
         if self.sampler_vars is None:
             self.strace.setup(self.draws, self.chain)
-            assert len(self.strace) == 0
         else:
             self.strace.setup(self.draws, self.chain, self.sampler_vars)
-            assert len(self.strace) == 0
+
+        assert len(self.strace) == 0
 
     def test_double_close(self):
         self.strace.close()
@@ -335,11 +335,14 @@ class SelectionTestCase(ModelBackendSampledTestCase):
             npt.assert_equal(result[varname], expected)
 
     def test_get_slice(self):
-        expected = []
-        for chain in [0, 1]:
-            expected.append(
-                {varname: self.expected[chain][varname][2:] for varname in self.mtrace.varnames}
-            )
+        expected = [
+            {
+                varname: self.expected[chain][varname][2:]
+                for varname in self.mtrace.varnames
+            }
+            for chain in [0, 1]
+        ]
+
         result = self.mtrace[2:]
         for chain in [0, 1]:
             for varname in self.test_point.keys():
@@ -365,11 +368,14 @@ class SelectionTestCase(ModelBackendSampledTestCase):
         assert len(result) == self.draws // 2
 
     def test_get_neg_slice(self):
-        expected = []
-        for chain in [0, 1]:
-            expected.append(
-                {varname: self.expected[chain][varname][-2:] for varname in self.mtrace.varnames}
-            )
+        expected = [
+            {
+                varname: self.expected[chain][varname][-2:]
+                for varname in self.mtrace.varnames
+            }
+            for chain in [0, 1]
+        ]
+
         result = self.mtrace[-2:]
         for chain in [0, 1]:
             for varname in self.test_point.keys():

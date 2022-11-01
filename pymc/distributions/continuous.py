@@ -240,14 +240,13 @@ def get_tau_sigma(tau=None, sigma=None):
     else:
         if sigma is not None:
             raise ValueError("Can't pass both tau and sigma")
+        if isinstance(tau, Variable):
+            tau_ = check_parameters(tau, tau > 0, msg="tau > 0")
         else:
-            if isinstance(tau, Variable):
-                tau_ = check_parameters(tau, tau > 0, msg="tau > 0")
-            else:
-                tau_ = np.asarray(tau)
-                if np.any(tau_ <= 0):
-                    raise ValueError("tau must be positive")
-            sigma = tau_**-0.5
+            tau_ = np.asarray(tau)
+            if np.any(tau_ <= 0):
+                raise ValueError("tau must be positive")
+        sigma = tau_**-0.5
 
     return floatX(tau), floatX(sigma)
 
@@ -304,14 +303,14 @@ class Uniform(BoundedContinuous):
         upper = at.as_tensor_variable(floatX(upper))
         return super().dist([lower, upper], **kwargs)
 
-    def moment(rv, size, lower, upper):
+    def moment(self, size, lower, upper):
         lower, upper = at.broadcast_arrays(lower, upper)
         moment = (lower + upper) / 2
         if not rv_size_is_none(size):
             moment = at.full(size, moment)
         return moment
 
-    def logcdf(value, lower, upper):
+    def logcdf(self, lower, upper):
         """
         Compute the log of the cumulative distribution function for Uniform distribution
         at the specified value.
@@ -327,12 +326,10 @@ class Uniform(BoundedContinuous):
         TensorVariable
         """
         return at.switch(
-            at.lt(value, lower) | at.lt(upper, lower),
+            at.lt(self, lower) | at.lt(upper, lower),
             -np.inf,
             at.switch(
-                at.lt(value, upper),
-                at.log(value - lower) - at.log(upper - lower),
-                0,
+                at.lt(self, upper), at.log(self - lower) - at.log(upper - lower), 0
             ),
         )
 
@@ -371,13 +368,12 @@ class Flat(Continuous):
 
     @classmethod
     def dist(cls, **kwargs):
-        res = super().dist([], **kwargs)
-        return res
+        return super().dist([], **kwargs)
 
-    def moment(rv, size):
+    def moment(self, size):
         return at.zeros(size)
 
-    def logp(value):
+    def logp(self):
         """
         Calculate log-probability of Flat distribution at specified value.
 
@@ -391,9 +387,9 @@ class Flat(Continuous):
         -------
         TensorVariable
         """
-        return at.zeros_like(value)
+        return at.zeros_like(self)
 
-    def logcdf(value):
+    def logcdf(self):
         """
         Compute the log of the cumulative distribution function for Flat distribution
         at the specified value.
@@ -409,7 +405,9 @@ class Flat(Continuous):
         TensorVariable
         """
         return at.switch(
-            at.eq(value, -np.inf), -np.inf, at.switch(at.eq(value, np.inf), 0, at.log(0.5))
+            at.eq(self, -np.inf),
+            -np.inf,
+            at.switch(at.eq(self, np.inf), 0, at.log(0.5)),
         )
 
 
@@ -439,13 +437,12 @@ class HalfFlat(PositiveContinuous):
 
     @classmethod
     def dist(cls, **kwargs):
-        res = super().dist([], **kwargs)
-        return res
+        return super().dist([], **kwargs)
 
-    def moment(rv, size):
+    def moment(self, size):
         return at.ones(size)
 
-    def logp(value):
+    def logp(self):
         """
         Calculate log-probability of HalfFlat distribution at specified value.
 
@@ -459,9 +456,9 @@ class HalfFlat(PositiveContinuous):
         -------
         TensorVariable
         """
-        return at.switch(at.lt(value, 0), -np.inf, at.zeros_like(value))
+        return at.switch(at.lt(self, 0), -np.inf, at.zeros_like(self))
 
-    def logcdf(value):
+    def logcdf(self):
         """
         Compute the log of the cumulative distribution function for HalfFlat distribution
         at the specified value.
@@ -476,7 +473,11 @@ class HalfFlat(PositiveContinuous):
         -------
         TensorVariable
         """
-        return at.switch(at.lt(value, np.inf), -np.inf, at.switch(at.eq(value, np.inf), 0, -np.inf))
+        return at.switch(
+            at.lt(self, np.inf),
+            -np.inf,
+            at.switch(at.eq(self, np.inf), 0, -np.inf),
+        )
 
 
 class Normal(Continuous):
@@ -557,13 +558,13 @@ class Normal(Continuous):
 
         return super().dist([mu, sigma], **kwargs)
 
-    def moment(rv, size, mu, sigma):
+    def moment(self, size, mu, sigma):
         mu, _ = at.broadcast_arrays(mu, sigma)
         if not rv_size_is_none(size):
             mu = at.full(size, mu)
         return mu
 
-    def logcdf(value, mu, sigma):
+    def logcdf(self, mu, sigma):
         """
         Compute the log of the cumulative distribution function for Normal distribution
         at the specified value.
@@ -579,9 +580,7 @@ class Normal(Continuous):
         TensorVariable
         """
         return check_parameters(
-            normal_lcdf(mu, sigma, value),
-            0 < sigma,
-            msg="sigma > 0",
+            normal_lcdf(mu, sigma, self), sigma > 0, msg="sigma > 0"
         )
 
 
@@ -715,7 +714,7 @@ class TruncatedNormal(BoundedContinuous):
         upper = at.as_tensor_variable(floatX(upper)) if upper is not None else at.constant(np.inf)
         return super().dist([mu, sigma, lower, upper], **kwargs)
 
-    def moment(rv, size, mu, sigma, lower, upper):
+    def moment(self, size, mu, sigma, lower, upper):
         mu, _, lower, upper = at.broadcast_arrays(mu, sigma, lower, upper)
         moment = at.switch(
             at.eq(lower, -np.inf),
@@ -740,13 +739,7 @@ class TruncatedNormal(BoundedContinuous):
 
         return moment
 
-    def logp(
-        value,
-        mu: Union[float, np.ndarray, TensorVariable],
-        sigma: Union[float, np.ndarray, TensorVariable],
-        lower: Union[float, np.ndarray, TensorVariable],
-        upper: Union[float, np.ndarray, TensorVariable],
-    ) -> RandomVariable:
+    def logp(self, mu: Union[float, np.ndarray, TensorVariable], sigma: Union[float, np.ndarray, TensorVariable], lower: Union[float, np.ndarray, TensorVariable], upper: Union[float, np.ndarray, TensorVariable]) -> RandomVariable:
         """
         Calculate log-probability of TruncatedNormal distribution at specified value.
 
@@ -776,12 +769,12 @@ class TruncatedNormal(BoundedContinuous):
         else:
             norm = 0.0
 
-        logp = _logprob(normal, (value,), None, None, None, mu, sigma) - norm
+        logp = _logprob(normal, (self, ), None, None, None, mu, sigma) - norm
         bounds = []
         if not unbounded_lower:
-            bounds.append(value >= lower)
+            bounds.append(self >= lower)
         if not unbounded_upper:
-            bounds.append(value <= upper)
+            bounds.append(self <= upper)
         if not unbounded_lower and not unbounded_upper:
             bounds.append(lower <= upper)
         return check_parameters(logp, *bounds)
@@ -866,13 +859,13 @@ class HalfNormal(PositiveContinuous):
 
         return super().dist([0.0, sigma], **kwargs)
 
-    def moment(rv, size, loc, sigma):
+    def moment(self, size, loc, sigma):
         moment = loc + sigma
         if not rv_size_is_none(size):
             moment = at.full(size, moment)
         return moment
 
-    def logcdf(value, loc, sigma):
+    def logcdf(self, loc, sigma):
         """
         Compute the log of the cumulative distribution function for HalfNormal distribution
         at the specified value.
@@ -887,18 +880,13 @@ class HalfNormal(PositiveContinuous):
         -------
         TensorVariable
         """
-        z = zvalue(value, mu=loc, sigma=sigma)
+        z = zvalue(self, mu=loc, sigma=sigma)
         logcdf = at.switch(
-            at.lt(value, loc),
-            -np.inf,
-            at.log1p(-at.erfc(z / at.sqrt(2.0))),
+            at.lt(self, loc), -np.inf, at.log1p(-at.erfc(z / at.sqrt(2.0)))
         )
 
-        return check_parameters(
-            logcdf,
-            0 < sigma,
-            msg="sigma > 0",
-        )
+
+        return check_parameters(logcdf, sigma > 0, msg="sigma > 0")
 
 
 class WaldRV(RandomVariable):
@@ -1014,7 +1002,7 @@ class Wald(PositiveContinuous):
 
         return super().dist([mu, lam, alpha], **kwargs)
 
-    def moment(rv, size, mu, lam, alpha):
+    def moment(self, size, mu, lam, alpha):
         mu, _, _ = at.broadcast_arrays(mu, lam, alpha)
         if not rv_size_is_none(size):
             mu = at.full(size, mu)
@@ -1029,25 +1017,16 @@ class Wald(PositiveContinuous):
                 return lam / phi, lam, phi
         else:
             if lam is None:
-                if phi is None:
-                    return mu, 1.0, 1.0 / mu
-                else:
-                    return mu, mu * phi, phi
-            else:
-                if phi is None:
-                    return mu, lam, lam / mu
+                return (mu, 1.0, 1.0 / mu) if phi is None else (mu, mu * phi, phi)
+            if phi is None:
+                return mu, lam, lam / mu
 
         raise ValueError(
             "Wald distribution must specify either mu only, "
             "mu and lam, mu and phi, or lam and phi."
         )
 
-    def logp(
-        value,
-        mu: Union[float, np.ndarray, TensorVariable],
-        lam: Union[float, np.ndarray, TensorVariable],
-        alpha: Union[float, np.ndarray, TensorVariable],
-    ) -> RandomVariable:
+    def logp(self, mu: Union[float, np.ndarray, TensorVariable], lam: Union[float, np.ndarray, TensorVariable], alpha: Union[float, np.ndarray, TensorVariable]) -> RandomVariable:
         """
         Calculate log-probability of Wald distribution at specified value.
 
@@ -1067,7 +1046,7 @@ class Wald(PositiveContinuous):
         -------
         TensorVariable
         """
-        centered_value = value - alpha
+        centered_value = self - alpha
         logp = at.switch(
             at.le(centered_value, 0),
             -np.inf,
@@ -1086,12 +1065,7 @@ class Wald(PositiveContinuous):
             msg="mu > 0, lam > 0, alpha >= 0",
         )
 
-    def logcdf(
-        value,
-        mu: Union[float, np.ndarray, TensorVariable],
-        lam: Union[float, np.ndarray, TensorVariable],
-        alpha: Union[float, np.ndarray, TensorVariable],
-    ) -> RandomVariable:
+    def logcdf(self, mu: Union[float, np.ndarray, TensorVariable], lam: Union[float, np.ndarray, TensorVariable], alpha: Union[float, np.ndarray, TensorVariable]) -> RandomVariable:
         """
         Compute the log of the cumulative distribution function for Wald distribution
         at the specified value.
@@ -1112,26 +1086,23 @@ class Wald(PositiveContinuous):
         -------
         TensorVariable
         """
-        value -= alpha
-        q = value / mu
+        self -= alpha
+        q = self / mu
         l = lam * mu
-        r = at.sqrt(value * lam)
+        r = at.sqrt(self * lam)
 
         a = normal_lcdf(0, 1, (q - 1.0) / r)
         b = 2.0 / l + normal_lcdf(0, 1, -(q + 1.0) / r)
 
         logcdf = at.switch(
-            at.le(value, 0),
+            at.le(self, 0),
             -np.inf,
-            at.switch(
-                at.lt(value, np.inf),
-                a + at.log1pexp(b - a),
-                0,
-            ),
+            at.switch(at.lt(self, np.inf), a + at.log1pexp(b - a), 0),
         )
 
+
         return check_parameters(
-            logcdf, 0 < mu, 0 < lam, 0 <= alpha, msg="mu > 0, lam > 0, alpha >= 0"
+            logcdf, mu > 0, lam > 0, alpha >= 0, msg="mu > 0, lam > 0, alpha >= 0"
         )
 
 
@@ -1219,14 +1190,14 @@ class Beta(UnitContinuous):
 
         return super().dist([alpha, beta], **kwargs)
 
-    def moment(rv, size, alpha, beta):
+    def moment(self, size, alpha, beta):
         mean = alpha / (alpha + beta)
         if not rv_size_is_none(size):
             mean = at.full(size, mean)
         return mean
 
     @classmethod
-    def get_alpha_beta(self, alpha=None, beta=None, mu=None, sigma=None):
+    def get_alpha_beta(cls, alpha=None, beta=None, mu=None, sigma=None):
         if (alpha is not None) and (beta is not None):
             pass
         elif (mu is not None) and (sigma is not None):
@@ -1241,7 +1212,7 @@ class Beta(UnitContinuous):
 
         return alpha, beta
 
-    def logcdf(value, alpha, beta):
+    def logcdf(self, alpha, beta):
         """
         Compute the log of the cumulative distribution function for Beta distribution
         at the specified value.
@@ -1262,21 +1233,13 @@ class Beta(UnitContinuous):
         """
 
         logcdf = at.switch(
-            at.lt(value, 0),
+            at.lt(self, 0),
             -np.inf,
-            at.switch(
-                at.lt(value, 1),
-                at.log(at.betainc(alpha, beta, value)),
-                0,
-            ),
+            at.switch(at.lt(self, 1), at.log(at.betainc(alpha, beta, self)), 0),
         )
 
-        return check_parameters(
-            logcdf,
-            0 < alpha,
-            0 < beta,
-            msg="alpha > 0, beta > 0",
-        )
+
+        return check_parameters(logcdf, alpha > 0, beta > 0, msg="alpha > 0, beta > 0")
 
 
 class KumaraswamyRV(RandomVariable):
@@ -1347,13 +1310,13 @@ class Kumaraswamy(UnitContinuous):
 
         return super().dist([a, b], *args, **kwargs)
 
-    def moment(rv, size, a, b):
+    def moment(self, size, a, b):
         mean = at.exp(at.log(b) + at.gammaln(1 + 1 / a) + at.gammaln(b) - at.gammaln(1 + 1 / a + b))
         if not rv_size_is_none(size):
             mean = at.full(size, mean)
         return mean
 
-    def logp(value, a, b):
+    def logp(self, a, b):
         """
         Calculate log-probability of Kumaraswamy distribution at specified value.
 
@@ -1367,12 +1330,14 @@ class Kumaraswamy(UnitContinuous):
         -------
         TensorVariable
         """
-        res = at.log(a) + at.log(b) + (a - 1) * at.log(value) + (b - 1) * at.log(1 - value**a)
-        res = at.switch(
-            at.or_(at.lt(value, 0), at.gt(value, 1)),
-            -np.inf,
-            res,
+        res = (
+            at.log(a)
+            + at.log(b)
+            + (a - 1) * at.log(self)
+            + (b - 1) * at.log(1 - self**a)
         )
+
+        res = at.switch(at.or_(at.lt(self, 0), at.gt(self, 1)), -np.inf, res)
         return check_parameters(
             res,
             a > 0,
@@ -1380,7 +1345,7 @@ class Kumaraswamy(UnitContinuous):
             msg="a > 0, b > 0",
         )
 
-    def logcdf(value, a, b):
+    def logcdf(self, a, b):
         r"""
         Compute the log of cumulative distribution function for the Kumaraswamy distribution
         at the specified value.
@@ -1397,14 +1362,11 @@ class Kumaraswamy(UnitContinuous):
         TensorVariable
         """
         res = at.switch(
-            at.lt(value, 0),
+            at.lt(self, 0),
             -np.inf,
-            at.switch(
-                at.lt(value, 1),
-                at.log1mexp(b * at.log1p(-(value**a))),
-                0,
-            ),
+            at.switch(at.lt(self, 1), at.log1mexp(b * at.log1p(-(self**a))), 0),
         )
+
 
         return check_parameters(
             res,
@@ -1465,12 +1427,12 @@ class Exponential(PositiveContinuous):
         # Aesara exponential op is parametrized in terms of mu (1/lam)
         return super().dist([at.reciprocal(lam)], **kwargs)
 
-    def moment(rv, size, mu):
+    def moment(self, size, mu):
         if not rv_size_is_none(size):
             mu = at.full(size, mu)
         return mu
 
-    def logcdf(value, mu):
+    def logcdf(self, mu):
         r"""
         Compute the log of cumulative distribution function for the Exponential distribution
         at the specified value.
@@ -1487,13 +1449,9 @@ class Exponential(PositiveContinuous):
         TensorVariable
         """
         lam = at.reciprocal(mu)
-        res = at.switch(
-            at.lt(value, 0),
-            -np.inf,
-            at.log1mexp(-lam * value),
-        )
+        res = at.switch(at.lt(self, 0), -np.inf, at.log1mexp(-lam * self))
 
-        return check_parameters(res, 0 <= lam, msg="lam >= 0")
+        return check_parameters(res, lam >= 0, msg="lam >= 0")
 
 
 class Laplace(Continuous):
@@ -1548,13 +1506,13 @@ class Laplace(Continuous):
 
         return super().dist([mu, b], *args, **kwargs)
 
-    def moment(rv, size, mu, b):
+    def moment(self, size, mu, b):
         mu, _ = at.broadcast_arrays(mu, b)
         if not rv_size_is_none(size):
             mu = at.full(size, mu)
         return mu
 
-    def logcdf(value, mu, b):
+    def logcdf(self, mu, b):
         """
         Compute the log of the cumulative distribution function for Laplace distribution
         at the specified value.
@@ -1569,10 +1527,10 @@ class Laplace(Continuous):
         -------
         TensorVariable
         """
-        y = (value - mu) / b
+        y = (self - mu) / b
 
         res = at.switch(
-            at.le(value, mu),
+            at.le(self, mu),
             at.log(0.5) + y,
             at.switch(
                 at.gt(y, 1),
@@ -1581,11 +1539,8 @@ class Laplace(Continuous):
             ),
         )
 
-        return check_parameters(
-            res,
-            0 < b,
-            msg="b > 0",
-        )
+
+        return check_parameters(res, b > 0, msg="b > 0")
 
 
 class AsymmetricLaplaceRV(RandomVariable):
@@ -1652,7 +1607,7 @@ class AsymmetricLaplace(Continuous):
 
         return super().dist([b, kappa, mu], *args, **kwargs)
 
-    def moment(rv, size, b, kappa, mu):
+    def moment(self, size, b, kappa, mu):
         mean = mu - (kappa - 1 / kappa) / b
 
         if not rv_size_is_none(size):
@@ -1760,13 +1715,13 @@ class LogNormal(PositiveContinuous):
 
         return super().dist([mu, sigma], *args, **kwargs)
 
-    def moment(rv, size, mu, sigma):
+    def moment(self, size, mu, sigma):
         mean = at.exp(mu + 0.5 * sigma**2)
         if not rv_size_is_none(size):
             mean = at.full(size, mean)
         return mean
 
-    def logcdf(value, mu, sigma):
+    def logcdf(self, mu, sigma):
         """
         Compute the log of the cumulative distribution function for LogNormal distribution
         at the specified value.
@@ -1781,13 +1736,9 @@ class LogNormal(PositiveContinuous):
         -------
         TensorVariable
         """
-        res = at.switch(
-            at.le(value, 0),
-            -np.inf,
-            normal_lcdf(mu, sigma, at.log(value)),
-        )
+        res = at.switch(at.le(self, 0), -np.inf, normal_lcdf(mu, sigma, at.log(self)))
 
-        return check_parameters(res, 0 < sigma, msg="sigma > 0")
+        return check_parameters(res, sigma > 0, msg="sigma > 0")
 
 
 Lognormal = LogNormal
@@ -1882,13 +1833,13 @@ class StudentT(Continuous):
 
         return super().dist([nu, mu, sigma], **kwargs)
 
-    def moment(rv, size, nu, mu, sigma):
+    def moment(self, size, nu, mu, sigma):
         mu, _, _ = at.broadcast_arrays(mu, nu, sigma)
         if not rv_size_is_none(size):
             mu = at.full(size, mu)
         return mu
 
-    def logp(value, nu, mu, sigma):
+    def logp(self, nu, mu, sigma):
         """
         Calculate log-probability of StudentT distribution at specified value.
 
@@ -1908,12 +1859,13 @@ class StudentT(Continuous):
             gammaln((nu + 1.0) / 2.0)
             + 0.5 * at.log(lam / (nu * np.pi))
             - gammaln(nu / 2.0)
-            - (nu + 1.0) / 2.0 * at.log1p(lam * (value - mu) ** 2 / nu)
+            - (nu + 1.0) / 2.0 * at.log1p(lam * (self - mu) ** 2 / nu)
         )
+
 
         return check_parameters(res, lam > 0, nu > 0, msg="lam > 0, nu > 0")
 
-    def logcdf(value, nu, mu, sigma):
+    def logcdf(self, nu, mu, sigma):
         """
         Compute the log of the cumulative distribution function for Student's T distribution
         at the specified value.
@@ -1930,13 +1882,13 @@ class StudentT(Continuous):
         """
         _, sigma = get_tau_sigma(sigma=sigma)
 
-        t = (value - mu) / sigma
+        t = (self - mu) / sigma
         sqrt_t2_nu = at.sqrt(t**2 + nu)
         x = (t + sqrt_t2_nu) / (2.0 * sqrt_t2_nu)
 
         res = at.log(at.betainc(nu / 2.0, nu / 2.0, x))
 
-        return check_parameters(res, 0 < nu, 0 < sigma, msg="nu > 0, sigma > 0")
+        return check_parameters(res, nu > 0, sigma > 0, msg="nu > 0, sigma > 0")
 
 
 class Pareto(BoundedContinuous):
@@ -1995,17 +1947,13 @@ class Pareto(BoundedContinuous):
 
         return super().dist([alpha, m], **kwargs)
 
-    def moment(rv, size, alpha, m):
+    def moment(self, size, alpha, m):
         median = m * 2 ** (1 / alpha)
         if not rv_size_is_none(size):
             median = at.full(size, median)
         return median
 
-    def logcdf(
-        value: Union[float, np.ndarray, TensorVariable],
-        alpha: Union[float, np.ndarray, TensorVariable],
-        m: Union[float, np.ndarray, TensorVariable],
-    ):
+    def logcdf(self, alpha: Union[float, np.ndarray, TensorVariable], m: Union[float, np.ndarray, TensorVariable]):
         """
         Compute the log of the cumulative distribution function for Pareto distribution
         at the specified value.
@@ -2020,10 +1968,10 @@ class Pareto(BoundedContinuous):
         -------
         TensorVariable
         """
-        arg = (m / value) ** alpha
+        arg = (m / self)**alpha
 
         res = at.switch(
-            at.lt(value, m),
+            at.lt(self, m),
             -np.inf,
             at.switch(
                 at.le(arg, 1e-5),
@@ -2032,7 +1980,8 @@ class Pareto(BoundedContinuous):
             ),
         )
 
-        return check_parameters(res, 0 < alpha, 0 < m, msg="alpha > 0, m > 0")
+
+        return check_parameters(res, alpha > 0, m > 0, msg="alpha > 0, m > 0")
 
 
 @_default_transform.register(Pareto)
@@ -2095,13 +2044,13 @@ class Cauchy(Continuous):
 
         return super().dist([alpha, beta], **kwargs)
 
-    def moment(rv, size, alpha, beta):
+    def moment(self, size, alpha, beta):
         alpha, _ = at.broadcast_arrays(alpha, beta)
         if not rv_size_is_none(size):
             alpha = at.full(size, alpha)
         return alpha
 
-    def logcdf(value, alpha, beta):
+    def logcdf(self, alpha, beta):
         """
         Compute the log of the cumulative distribution function for Cauchy distribution
         at the specified value.
@@ -2116,12 +2065,8 @@ class Cauchy(Continuous):
         -------
         TensorVariable
         """
-        res = at.log(0.5 + at.arctan((value - alpha) / beta) / np.pi)
-        return check_parameters(
-            res,
-            0 < beta,
-            msg="beta > 0",
-        )
+        res = at.log(0.5 + at.arctan((self - alpha) / beta) / np.pi)
+        return check_parameters(res, beta > 0, msg="beta > 0")
 
 
 class HalfCauchy(PositiveContinuous):
@@ -2170,12 +2115,12 @@ class HalfCauchy(PositiveContinuous):
         beta = at.as_tensor_variable(floatX(beta))
         return super().dist([0.0, beta], **kwargs)
 
-    def moment(rv, size, loc, beta):
+    def moment(self, size, loc, beta):
         if not rv_size_is_none(size):
             beta = at.full(size, beta)
         return beta
 
-    def logcdf(value, loc, beta):
+    def logcdf(self, loc, beta):
         """
         Compute the log of the cumulative distribution function for HalfCauchy distribution
         at the specified value.
@@ -2191,12 +2136,13 @@ class HalfCauchy(PositiveContinuous):
         TensorVariable
         """
         res = at.switch(
-            at.lt(value, loc),
+            at.lt(self, loc),
             -np.inf,
-            at.log(2 * at.arctan((value - loc) / beta) / np.pi),
+            at.log(2 * at.arctan((self - loc) / beta) / np.pi),
         )
 
-        return check_parameters(res, 0 < beta, msg="beta > 0")
+
+        return check_parameters(res, beta > 0, msg="beta > 0")
 
 
 class Gamma(PositiveContinuous):
@@ -2289,14 +2235,14 @@ class Gamma(PositiveContinuous):
 
         return alpha, beta
 
-    def moment(rv, size, alpha, inv_beta):
+    def moment(self, size, alpha, inv_beta):
         # The Aesara `GammaRV` `Op` inverts the `beta` parameter itself
         mean = alpha * inv_beta
         if not rv_size_is_none(size):
             mean = at.full(size, mean)
         return mean
 
-    def logcdf(value, alpha, inv_beta):
+    def logcdf(self, alpha, inv_beta):
         """
         Compute the log of the cumulative distribution function for Gamma distribution
         at the specified value.
@@ -2314,12 +2260,11 @@ class Gamma(PositiveContinuous):
         """
         beta = at.reciprocal(inv_beta)
         res = at.switch(
-            at.lt(value, 0),
-            -np.inf,
-            at.log(at.gammainc(alpha, beta * value)),
+            at.lt(self, 0), -np.inf, at.log(at.gammainc(alpha, beta * self))
         )
 
-        return check_parameters(res, 0 < alpha, 0 < beta, msg="alpha > 0, beta > 0")
+
+        return check_parameters(res, alpha > 0, beta > 0, msg="alpha > 0, beta > 0")
 
 
 class InverseGamma(PositiveContinuous):
@@ -2381,7 +2326,7 @@ class InverseGamma(PositiveContinuous):
 
         return super().dist([alpha, beta], **kwargs)
 
-    def moment(rv, size, alpha, beta):
+    def moment(self, size, alpha, beta):
         mean = beta / (alpha - 1.0)
         mode = beta / (alpha + 1.0)
         moment = at.switch(alpha > 1, mean, mode)
@@ -2392,9 +2337,7 @@ class InverseGamma(PositiveContinuous):
     @classmethod
     def _get_alpha_beta(cls, alpha, beta, mu, sigma):
         if alpha is not None:
-            if beta is not None:
-                pass
-            else:
+            if beta is None:
                 beta = 1
         elif (mu is not None) and (sigma is not None):
             if isinstance(sigma, Variable):
@@ -2413,10 +2356,10 @@ class InverseGamma(PositiveContinuous):
         return alpha, beta
 
     @classmethod
-    def _distr_parameters_for_repr(self):
+    def _distr_parameters_for_repr(cls):
         return ["alpha", "beta"]
 
-    def logcdf(value, alpha, beta):
+    def logcdf(self, alpha, beta):
         """
         Compute the log of the cumulative distribution function for Inverse Gamma
         distribution at the specified value.
@@ -2437,12 +2380,11 @@ class InverseGamma(PositiveContinuous):
         TensorVariable
         """
         res = at.switch(
-            at.lt(value, 0),
-            -np.inf,
-            at.log(at.gammaincc(alpha, beta / value)),
+            at.lt(self, 0), -np.inf, at.log(at.gammaincc(alpha, beta / self))
         )
 
-        return check_parameters(res, 0 < alpha, 0 < beta, msg="alpha > 0, beta > 0")
+
+        return check_parameters(res, alpha > 0, beta > 0, msg="alpha > 0, beta > 0")
 
 
 class ChiSquared(PositiveContinuous):
@@ -2491,13 +2433,13 @@ class ChiSquared(PositiveContinuous):
         nu = at.as_tensor_variable(floatX(nu))
         return super().dist([nu], *args, **kwargs)
 
-    def moment(rv, size, nu):
+    def moment(self, size, nu):
         moment = nu
         if not rv_size_is_none(size):
             moment = at.full(size, moment)
         return moment
 
-    def logcdf(value, nu):
+    def logcdf(self, nu):
         """
         Compute the log of the cumulative distribution function for ChiSquared distribution
         at the specified value.
@@ -2513,7 +2455,7 @@ class ChiSquared(PositiveContinuous):
         -------
         TensorVariable
         """
-        return logcdf(Gamma.dist(alpha=nu / 2, beta=0.5), value)
+        return logcdf(Gamma.dist(alpha=nu / 2, beta=0.5), self)
 
 
 # TODO: Remove this once logp for multiplication is working!
@@ -2590,13 +2532,13 @@ class Weibull(PositiveContinuous):
 
         return super().dist([alpha, beta], *args, **kwargs)
 
-    def moment(rv, size, alpha, beta):
+    def moment(self, size, alpha, beta):
         mean = beta * at.gamma(1 + 1 / alpha)
         if not rv_size_is_none(size):
             mean = at.full(size, mean)
         return mean
 
-    def logcdf(value, alpha, beta):
+    def logcdf(self, alpha, beta):
         r"""
         Compute the log of the cumulative distribution function for Weibull distribution
         at the specified value.
@@ -2611,25 +2553,19 @@ class Weibull(PositiveContinuous):
         -------
         TensorVariable
         """
-        a = (value / beta) ** alpha
+        a = (self / beta)**alpha
 
-        res = at.switch(
-            at.lt(value, 0),
-            -np.inf,
-            at.log1mexp(-a),
-        )
+        res = at.switch(at.lt(self, 0), -np.inf, at.log1mexp(-a))
 
-        return check_parameters(res, 0 < alpha, 0 < beta, msg="alpha > 0, beta > 0")
+        return check_parameters(res, alpha > 0, beta > 0, msg="alpha > 0, beta > 0")
 
-    def logp(value, alpha, beta):
+    def logp(self, alpha, beta):
         res = (
-            at.log(alpha)
-            - at.log(beta)
-            + (alpha - 1.0) * at.log(value / beta)
-            - at.pow(value / beta, alpha)
-        )
-        res = at.switch(at.ge(value, 0.0), res, -np.inf)
-        return check_parameters(res, 0 < alpha, 0 < beta, msg="alpha > 0, beta > 0")
+            at.log(alpha) - at.log(beta) + (alpha - 1.0) * at.log(self / beta)
+        ) - at.pow(self / beta, alpha)
+
+        res = at.switch(at.ge(self, 0.0), res, -np.inf)
+        return check_parameters(res, alpha > 0, beta > 0, msg="alpha > 0, beta > 0")
 
 
 class HalfStudentTRV(RandomVariable):
@@ -2715,13 +2651,13 @@ class HalfStudentT(PositiveContinuous):
 
         return super().dist([nu, sigma], *args, **kwargs)
 
-    def moment(rv, size, nu, sigma):
+    def moment(self, size, nu, sigma):
         sigma, _ = at.broadcast_arrays(sigma, nu)
         if not rv_size_is_none(size):
             sigma = at.full(size, sigma)
         return sigma
 
-    def logp(value, nu, sigma):
+    def logp(self, nu, sigma):
         """
         Calculate log-probability of HalfStudentT distribution at specified value.
 
@@ -2741,14 +2677,11 @@ class HalfStudentT(PositiveContinuous):
             + gammaln((nu + 1.0) / 2.0)
             - gammaln(nu / 2.0)
             - 0.5 * at.log(nu * np.pi * sigma**2)
-            - (nu + 1.0) / 2.0 * at.log1p(value**2 / (nu * sigma**2))
+            - (nu + 1.0) / 2.0 * at.log1p(self**2 / (nu * sigma**2))
         )
 
-        res = at.switch(
-            at.lt(value, 0),
-            -np.inf,
-            res,
-        )
+
+        res = at.switch(at.lt(self, 0), -np.inf, res)
 
         return check_parameters(res, sigma > 0, nu > 0, msg="sigma > 0, nu > 0")
 
@@ -2844,14 +2777,14 @@ class ExGaussian(Continuous):
 
         return super().dist([mu, sigma, nu], *args, **kwargs)
 
-    def moment(rv, size, mu, sigma, nu):
+    def moment(self, size, mu, sigma, nu):
         mu, nu, _ = at.broadcast_arrays(mu, nu, sigma)
         moment = mu + nu
         if not rv_size_is_none(size):
             moment = at.full(size, moment)
         return moment
 
-    def logp(value, mu, sigma, nu):
+    def logp(self, mu, sigma, nu):
         """
         Calculate log-probability of ExGaussian distribution at specified value.
 
@@ -2869,22 +2802,14 @@ class ExGaussian(Continuous):
         # Alogithm is adapted from dexGAUS.R from gamlss
         res = at.switch(
             at.gt(nu, 0.05 * sigma),
-            (
-                -at.log(nu)
-                + (mu - value) / nu
-                + 0.5 * (sigma / nu) ** 2
-                + normal_lcdf(mu + (sigma**2) / nu, sigma, value)
-            ),
-            log_normal(value, mean=mu, sigma=sigma),
-        )
-        return check_parameters(
-            res,
-            0 < sigma,
-            0 < nu,
-            msg="nu > 0, sigma > 0",
+            ((-at.log(nu) + (mu - self) / nu) + 0.5 * (sigma / nu) ** 2)
+            + normal_lcdf(mu + (sigma**2) / nu, sigma, self),
+            log_normal(self, mean=mu, sigma=sigma),
         )
 
-    def logcdf(value, mu, sigma, nu):
+        return check_parameters(res, sigma > 0, nu > 0, msg="nu > 0, sigma > 0")
+
+    def logcdf(self, mu, sigma, nu):
         """
         Compute the log of the cumulative distribution function for ExGaussian distribution
         at the specified value.
@@ -2910,17 +2835,15 @@ class ExGaussian(Continuous):
         res = at.switch(
             at.gt(nu, 0.05 * sigma),
             logdiffexp(
-                normal_lcdf(mu, sigma, value),
-                (
-                    (mu - value) / nu
-                    + 0.5 * (sigma / nu) ** 2
-                    + normal_lcdf(mu + (sigma**2) / nu, sigma, value)
-                ),
+                normal_lcdf(mu, sigma, self),
+                ((mu - self) / nu + 0.5 * (sigma / nu) ** 2)
+                + normal_lcdf(mu + (sigma**2) / nu, sigma, self),
             ),
-            normal_lcdf(mu, sigma, value),
+            normal_lcdf(mu, sigma, self),
         )
 
-        return check_parameters(res, 0 < sigma, 0 < nu, msg="sigma > 0, nu > 0")
+
+        return check_parameters(res, sigma > 0, nu > 0, msg="sigma > 0, nu > 0")
 
 
 class VonMises(CircularContinuous):
@@ -2977,7 +2900,7 @@ class VonMises(CircularContinuous):
         kappa = at.as_tensor_variable(floatX(kappa))
         return super().dist([mu, kappa], *args, **kwargs)
 
-    def moment(rv, size, mu, kappa):
+    def moment(self, size, mu, kappa):
         mu, _ = at.broadcast_arrays(mu, kappa)
         if not rv_size_is_none(size):
             mu = at.full(size, mu)
@@ -3074,13 +2997,13 @@ class SkewNormal(Continuous):
 
         return super().dist([mu, sigma, alpha], *args, **kwargs)
 
-    def moment(rv, size, mu, sigma, alpha):
+    def moment(self, size, mu, sigma, alpha):
         mean = mu + sigma * (2 / np.pi) ** 0.5 * alpha / (1 + alpha**2) ** 0.5
         if not rv_size_is_none(size):
             mean = at.full(size, mean)
         return mean
 
-    def logp(value, mu, sigma, alpha):
+    def logp(self, mu, sigma, alpha):
         """
         Calculate log-probability of SkewNormal distribution at specified value.
 
@@ -3097,9 +3020,10 @@ class SkewNormal(Continuous):
         tau, _ = get_tau_sigma(sigma=sigma)
 
         res = (
-            at.log(1 + at.erf(((value - mu) * at.sqrt(tau) * alpha) / at.sqrt(2)))
-            + (-tau * (value - mu) ** 2 + at.log(tau / np.pi / 2.0)) / 2.0
+            at.log(1 + at.erf((self - mu) * at.sqrt(tau) * alpha / at.sqrt(2)))
+            + (-tau * (self - mu) ** 2 + at.log(tau / np.pi / 2.0)) / 2.0
         )
+
 
         return check_parameters(res, tau > 0, msg="tau > 0")
 
@@ -3171,13 +3095,13 @@ class Triangular(BoundedContinuous):
 
         return super().dist([lower, c, upper], *args, **kwargs)
 
-    def moment(rv, size, lower, c, upper):
+    def moment(self, size, lower, c, upper):
         mean = (lower + upper + c) / 3
         if not rv_size_is_none(size):
             mean = at.full(size, mean)
         return mean
 
-    def logcdf(value, lower, c, upper):
+    def logcdf(self, lower, c, upper):
         """
         Compute the log of the cumulative distribution function for Triangular distribution
         at the specified value.
@@ -3193,18 +3117,21 @@ class Triangular(BoundedContinuous):
         TensorVariable
         """
         res = at.switch(
-            at.le(value, lower),
+            at.le(self, lower),
             -np.inf,
             at.switch(
-                at.le(value, c),
-                at.log(((value - lower) ** 2) / ((upper - lower) * (c - lower))),
+                at.le(self, c),
+                at.log((self - lower) ** 2 / ((upper - lower) * (c - lower))),
                 at.switch(
-                    at.lt(value, upper),
-                    at.log1p(-((upper - value) ** 2) / ((upper - lower) * (upper - c))),
+                    at.lt(self, upper),
+                    at.log1p(
+                        -((upper - self) ** 2) / ((upper - lower) * (upper - c))
+                    ),
                     0,
                 ),
             ),
         )
+
 
         return check_parameters(
             res,
@@ -3278,7 +3205,7 @@ class Gumbel(Continuous):
 
         return super().dist([mu, beta], **kwargs)
 
-    def moment(rv, size, mu, beta):
+    def moment(self, size, mu, beta):
         mean = mu + beta * np.euler_gamma
         if not rv_size_is_none(size):
             mean = at.full(size, mean)
@@ -3287,11 +3214,7 @@ class Gumbel(Continuous):
     def _distr_parameters_for_repr(self):
         return ["mu", "beta"]
 
-    def logcdf(
-        value: Union[float, np.ndarray, TensorVariable],
-        mu: Union[float, np.ndarray, TensorVariable],
-        beta: Union[float, np.ndarray, TensorVariable],
-    ) -> TensorVariable:
+    def logcdf(self, mu: Union[float, np.ndarray, TensorVariable], beta: Union[float, np.ndarray, TensorVariable]) -> TensorVariable:
         """
         Compute the log of the cumulative distribution function for Gumbel distribution
         at the specified value.
@@ -3306,9 +3229,9 @@ class Gumbel(Continuous):
         -------
         TensorVariable
         """
-        res = -at.exp(-(value - mu) / beta)
+        res = -at.exp(-(self - mu) / beta)
 
-        return check_parameters(res, 0 < beta, msg="beta > 0")
+        return check_parameters(res, beta > 0, msg="beta > 0")
 
 
 class RiceRV(RandomVariable):
@@ -3408,7 +3331,7 @@ class Rice(PositiveContinuous):
             return nu, b, sigma
         raise ValueError("Rice distribution must specify either nu" " or b.")
 
-    def moment(rv, size, nu, sigma):
+    def moment(self, size, nu, sigma):
         nu_sigma_ratio = -(nu**2) / (2 * sigma**2)
         mean = (
             sigma
@@ -3424,7 +3347,7 @@ class Rice(PositiveContinuous):
             mean = at.full(size, mean)
         return mean
 
-    def logp(value, b, sigma):
+    def logp(self, b, sigma):
         """
         Calculate log-probability of Rice distribution at specified value.
 
@@ -3438,13 +3361,14 @@ class Rice(PositiveContinuous):
         -------
         TensorVariable
         """
-        x = value / sigma
+        x = self / sigma
 
         res = at.switch(
-            at.le(value, 0),
+            at.le(self, 0),
             -np.inf,
             at.log(x * at.exp((-(x - b) * (x - b)) / 2) * i0e(x * b) / sigma),
         )
+
 
         return check_parameters(
             res,
@@ -3507,13 +3431,13 @@ class Logistic(Continuous):
         s = at.as_tensor_variable(floatX(s))
         return super().dist([mu, s], *args, **kwargs)
 
-    def moment(rv, size, mu, s):
+    def moment(self, size, mu, s):
         mu, _ = at.broadcast_arrays(mu, s)
         if not rv_size_is_none(size):
             mu = at.full(size, mu)
         return mu
 
-    def logcdf(value, mu, s):
+    def logcdf(self, mu, s):
         r"""
         Compute the log of the cumulative distribution function for Logistic distribution
         at the specified value.
@@ -3528,13 +3452,9 @@ class Logistic(Continuous):
         -------
         TensorVariable
         """
-        res = -at.log1pexp(-(value - mu) / s)
+        res = -at.log1pexp(-(self - mu) / s)
 
-        return check_parameters(
-            res,
-            0 < s,
-            msg="s > 0",
-        )
+        return check_parameters(res, s > 0, msg="s > 0")
 
 
 class LogitNormalRV(RandomVariable):
@@ -3610,13 +3530,13 @@ class LogitNormal(UnitContinuous):
 
         return super().dist([mu, sigma], **kwargs)
 
-    def moment(rv, size, mu, sigma):
+    def moment(self, size, mu, sigma):
         median, _ = at.broadcast_arrays(invlogit(mu), sigma)
         if not rv_size_is_none(size):
             median = at.full(size, median)
         return median
 
-    def logp(value, mu, sigma):
+    def logp(self, mu, sigma):
         """
         Calculate log-probability of LogitNormal distribution at specified value.
 
@@ -3633,14 +3553,15 @@ class LogitNormal(UnitContinuous):
         tau, _ = get_tau_sigma(sigma=sigma)
 
         res = at.switch(
-            at.or_(at.le(value, 0), at.ge(value, 1)),
+            at.or_(at.le(self, 0), at.ge(self, 1)),
             -np.inf,
             (
-                -0.5 * tau * (logit(value) - mu) ** 2
+                -0.5 * tau * (logit(self) - mu) ** 2
                 + 0.5 * at.log(tau / (2.0 * np.pi))
-                - at.log(value * (1 - value))
-            ),
+            )
+            - at.log(self * (1 - self)),
         )
+
 
         return check_parameters(
             res,
@@ -3760,7 +3681,7 @@ class Interpolated(BoundedContinuous):
 
         return super().dist([x_points, pdf_points, cdf_points], **kwargs)
 
-    def moment(rv, size, x_points, pdf_points, cdf_points):
+    def moment(self, size, x_points, pdf_points, cdf_points):
         """
         Estimates the expectation integral using the trapezoid rule; cdf_points are not used.
         """
@@ -3772,7 +3693,7 @@ class Interpolated(BoundedContinuous):
 
         return moment
 
-    def logp(value, x_points, pdf_points, cdf_points):
+    def logp(self, x_points, pdf_points, cdf_points):
         """
         Calculate log-probability of Interpolated distribution at specified value.
 
@@ -3795,7 +3716,7 @@ class Interpolated(BoundedContinuous):
         interp_op = SplineWrapper(interp)
         Z = at.constant(Z)
 
-        return at.log(interp_op(value) / Z)
+        return at.log(interp_op(self) / Z)
 
 
 @_default_transform.register(Interpolated)
@@ -3879,14 +3800,14 @@ class Moyal(Continuous):
 
         return super().dist([mu, sigma], *args, **kwargs)
 
-    def moment(rv, size, mu, sigma):
+    def moment(self, size, mu, sigma):
         mean = mu + sigma * (np.euler_gamma + at.log(2))
 
         if not rv_size_is_none(size):
             mean = at.full(size, mean)
         return mean
 
-    def logp(value, mu, sigma):
+    def logp(self, mu, sigma):
         """
         Calculate log-probability of Moyal distribution at specified value.
 
@@ -3900,11 +3821,11 @@ class Moyal(Continuous):
         -------
         TensorVariable
         """
-        scaled = (value - mu) / sigma
+        scaled = (self - mu) / sigma
         res = -(1 / 2) * (scaled + at.exp(-scaled)) - at.log(sigma) - (1 / 2) * at.log(2 * np.pi)
-        return check_parameters(res, 0 < sigma, msg="sigma > 0")
+        return check_parameters(res, sigma > 0, msg="sigma > 0")
 
-    def logcdf(value, mu, sigma):
+    def logcdf(self, mu, sigma):
         """
         Compute the log of the cumulative distribution function for Moyal distribution
         at the specified value.
@@ -3919,13 +3840,9 @@ class Moyal(Continuous):
         -------
         TensorVariable
         """
-        scaled = (value - mu) / sigma
+        scaled = (self - mu) / sigma
         res = at.log(at.erfc(at.exp(-scaled / 2) * (2**-0.5)))
-        return check_parameters(
-            res,
-            0 < sigma,
-            msg="sigma > 0",
-        )
+        return check_parameters(res, sigma > 0, msg="sigma > 0")
 
 
 class PolyaGammaRV(RandomVariable):
@@ -4093,13 +4010,13 @@ class PolyaGamma(PositiveContinuous):
 
         return super().dist([h, z], **kwargs)
 
-    def moment(rv, size, h, z):
+    def moment(self, size, h, z):
         mean = at.switch(at.eq(z, 0), h / 4, tanh(z / 2) * (h / (2 * z)))
         if not rv_size_is_none(size):
             mean = at.full(size, mean)
         return mean
 
-    def logp(value, h, z):
+    def logp(self, h, z):
         """
         Calculate log-probability of Polya-Gamma distribution at specified value.
 
@@ -4116,17 +4033,18 @@ class PolyaGamma(PositiveContinuous):
         """
 
         res = at.switch(
-            at.le(value, 0),
+            at.le(self, 0),
             -np.inf,
-            _PolyaGammaLogDistFunc(get_pdf=True)(value, h, z),
+            _PolyaGammaLogDistFunc(get_pdf=True)(self, h, z),
         )
+
         return check_parameters(
             res,
             h > 0,
             msg="h > 0",
         )
 
-    def logcdf(value, h, z):
+    def logcdf(self, h, z):
         """
         Compute the log of the cumulative distribution function for the
         Polya-Gamma distribution at the specified value.
@@ -4142,10 +4060,11 @@ class PolyaGamma(PositiveContinuous):
         TensorVariable
         """
         res = at.switch(
-            at.le(value, 0),
+            at.le(self, 0),
             -np.inf,
-            _PolyaGammaLogDistFunc(get_pdf=False)(value, h, z),
+            _PolyaGammaLogDistFunc(get_pdf=False)(self, h, z),
         )
+
 
         return check_parameters(
             res,

@@ -251,7 +251,7 @@ class BaseTestDistributionRandom(SeededTest):
                 getattr(self, check_name)()
 
     def _instantiate_pymc_rv(self, dist_params=None):
-        params = dist_params if dist_params else self.pymc_dist_params
+        params = dist_params or self.pymc_dist_params
         self.pymc_rv = self.pymc_dist.dist(
             **params, size=self.size, rng=aesara.shared(self.get_random_state(reset=True))
         )
@@ -427,8 +427,7 @@ class TestAsymmetricLaplace(BaseTestDistributionRandom):
         switch = kappa**2 / (1 + kappa**2)
         non_positive_x = mu + kappa * np.log(u * (1 / switch)) / b
         positive_x = mu - np.log((1 - u) * (1 + kappa**2)) / (kappa * b)
-        draws = non_positive_x * (u <= switch) + positive_x * (u > switch)
-        return draws
+        return non_positive_x * (u <= switch) + positive_x * (u > switch)
 
     def seeded_asymmetriclaplace_rng_fn(self):
         uniform_rng_fct = functools.partial(
@@ -1511,9 +1510,7 @@ class TestDiscreteUniform(BaseTestDistributionRandom):
 
 class TestDiracDelta(BaseTestDistributionRandom):
     def diracdelta_rng_fn(self, size, c):
-        if size is None:
-            return c
-        return np.full(size, c)
+        return c if size is None else np.full(size, c)
 
     pymc_dist = pm.DiracDelta
     pymc_dist_params = {"c": 3}
@@ -1649,11 +1646,7 @@ class TestWishart(BaseTestDistributionRandom):
         for size in (None, (2,), (1, 2), (4, 3, 2)):
             x = pm.Wishart.dist(nu=4, V=np.stack([np.eye(3), np.eye(3)]), size=size)
 
-            if size is None:
-                expected_shape = (2, 3, 3)
-            else:
-                expected_shape = size + (3, 3)
-
+            expected_shape = (2, 3, 3) if size is None else size + (3, 3)
             assert tuple(x.shape.eval()) == expected_shape
 
             # RNG does not currently support batched parameters, whet it does this test
@@ -2255,8 +2248,9 @@ def generate_shapes(include_params=False):
     if not include_params:
         del mudim_as_event[-1]
         del mudim_as_dist[-1]
-    data = itertools.chain(itertools.product(*mudim_as_event), itertools.product(*mudim_as_dist))
-    return data
+    return itertools.chain(
+        itertools.product(*mudim_as_event), itertools.product(*mudim_as_dist)
+    )
 
 
 @pytest.mark.xfail(reason="This distribution has not been refactored for v4")

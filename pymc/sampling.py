@@ -147,14 +147,10 @@ def instantiate_steppers(
             step = step_class(vars=vars, model=model, **args)
             steps.append(step)
 
-    unused_args = set(step_kwargs).difference(used_keys)
-    if unused_args:
-        raise ValueError("Unused step method arguments: %s" % unused_args)
+    if unused_args := set(step_kwargs).difference(used_keys):
+        raise ValueError(f"Unused step method arguments: {unused_args}")
 
-    if len(steps) == 1:
-        return steps[0]
-
-    return steps
+    return steps[0] if len(steps) == 1 else steps
 
 
 def assign_step_methods(model, step=None, methods=None, step_kwargs=None):
@@ -208,9 +204,7 @@ def assign_step_methods(model, step=None, methods=None, step_kwargs=None):
 
     for var in model.value_vars:
         if var not in assigned_vars:
-            # determine if a gradient can be computed
-            has_gradient = var.dtype not in discrete_types
-            if has_gradient:
+            if has_gradient := var.dtype not in discrete_types:
                 try:
                     tg.grad(model_logp, var)
                 except (NotImplementedError, tg.NullTypeGradError):
@@ -249,10 +243,7 @@ def all_continuous(vars):
 
     vars_ = [var for var in vars if not hasattr(var.tag, "observations")]
 
-    if any([(var.dtype in discrete_types) for var in vars_]):
-        return False
-    else:
-        return True
+    return all(var.dtype not in discrete_types for var in vars_)
 
 
 def _get_seeds_per_chain(

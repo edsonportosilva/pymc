@@ -58,12 +58,8 @@ def get_version():
     lines = open(version_file).readlines()
     version_regex = r"^__version__ = ['\"]([^'\"]*)['\"]"
     for line in lines:
-        mo = re.search(version_regex, line, re.M)
-        if mo:
-            version = mo.group(1)
-
-            return version
-
+        if mo := re.search(version_regex, line, re.M):
+            return mo[1]
     raise RuntimeError(f"Unable to find version in {version_file}.")
 
 

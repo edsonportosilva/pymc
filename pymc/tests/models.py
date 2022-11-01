@@ -190,10 +190,7 @@ def simple_normal(bounded_prior=False):
     a, b = (9, 12)  # bounds for uniform RV, need non-symmetric to reproduce issue
 
     with pm.Model() as model:
-        if bounded_prior:
-            mu_i = pm.Uniform("mu_i", a, b)
-        else:
-            mu_i = pm.Flat("mu_i")
+        mu_i = pm.Uniform("mu_i", a, b) if bounded_prior else pm.Flat("mu_i")
         pm.Normal("X_obs", mu=mu_i, sigma=sigma, observed=x0)
 
     return model.initial_point(), model, None

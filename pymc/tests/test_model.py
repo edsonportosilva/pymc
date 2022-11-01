@@ -350,7 +350,7 @@ class TestValueGradFunction(unittest.TestCase):
         pnt = m.initial_point(seed=None).copy()
         del pnt["x2_missing"]
 
-        res = [gf(DictToArrayBijection.map(Point(pnt, model=m))) for i in range(5)]
+        res = [gf(DictToArrayBijection.map(Point(pnt, model=m))) for _ in range(5)]
 
         # Assert that all the elements of res are equal
         assert res[1:] == res[:-1]
@@ -395,10 +395,10 @@ def test_multiple_observed_rv():
         x = pm.DensityDist(  # pylint: disable=unused-variable
             "x", mu, logp=lambda value, mu: pm.Normal.logp(value, mu, 1.0), observed=0.1
         )
-    assert not model["x"] == model["mu"]
+    assert model["x"] != model["mu"]
     assert model["x"] == model["x"]
     assert model["x"] in model.observed_RVs
-    assert not model["x"] in model.value_vars
+    assert model["x"] not in model.value_vars
 
 
 def test_tempered_logp_dlogp():

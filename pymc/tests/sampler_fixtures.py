@@ -175,7 +175,7 @@ class NutsFixture(BaseSampler):
     def make_step(cls):
         args = {}
         if hasattr(cls, "step_args"):
-            args.update(cls.step_args)
+            args |= cls.step_args
         if "scaling" not in args:
             _, step = pm.sampling.init_nuts(n_init=10000, **args)
         else:
@@ -192,7 +192,7 @@ class MetropolisFixture(BaseSampler):
     def make_step(cls):
         args = {}
         if hasattr(cls, "step_args"):
-            args.update(cls.step_args)
+            args |= cls.step_args
         return pm.Metropolis(**args)
 
 
@@ -201,5 +201,5 @@ class SliceFixture(BaseSampler):
     def make_step(cls):
         args = {}
         if hasattr(cls, "step_args"):
-            args.update(cls.step_args)
+            args |= cls.step_args
         return pm.Slice(**args)

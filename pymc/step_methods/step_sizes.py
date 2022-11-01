@@ -37,10 +37,7 @@ class DualAverageAdaptation:
         self._tuned_stats = []
 
     def current(self, tune):
-        if tune:
-            return np.exp(self._log_step)
-        else:
-            return np.exp(self._log_bar)
+        return np.exp(self._log_step) if tune else np.exp(self._log_bar)
 
     def update(self, accept_stat, tune):
         if not tune:

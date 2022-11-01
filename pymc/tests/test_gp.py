@@ -1232,7 +1232,6 @@ class TestPlotGP:
             ax, x=np.linspace(0, 50, X), samples=np.random.normal(np.arange(X), size=(S, X))
         )
         plt.close()
-        pass
 
     def test_plot_gp_dist_warn_nan(self):
         """Test that the plotting helper works with the stated input shapes."""
@@ -1246,7 +1245,6 @@ class TestPlotGP:
         with pytest.warns(UserWarning):
             pm.gp.util.plot_gp_dist(ax, x=np.linspace(0, 50, X), samples=samples)
         plt.close()
-        pass
 
 
 class TestKmeansInducing:

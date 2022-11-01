@@ -61,10 +61,10 @@ class BlockedStep(ABC):
             kwargs["blocked"] = blocked
 
         model = modelcontext(kwargs.get("model"))
-        kwargs.update({"model": model})
+        kwargs["model"] = model
 
         # vars can either be first arg or a kwarg
-        if "vars" not in kwargs and len(args) >= 1:
+        if "vars" not in kwargs and args:
             vars = args[0]
             args = args[1:]
         elif "vars" in kwargs:
@@ -103,7 +103,7 @@ class BlockedStep(ABC):
         return self.__newargs
 
     @abstractmethod
-    def step(point: PointType, *args, **kwargs) -> Union[PointType, Tuple[PointType, StatsType]]:
+    def step(self, *args, **kwargs) -> Union[PointType, Tuple[PointType, StatsType]]:
         """Perform a single step of the sampler."""
 
     @staticmethod
@@ -166,10 +166,7 @@ class ArrayStep(BlockedStep):
 
         point_new = DictToArrayBijection.rmap(apoint_new, start_point=point)
 
-        if self.generates_stats:
-            return point_new, stats
-
-        return point_new
+        return (point_new, stats) if self.generates_stats else point_new
 
     @abstractmethod
     def astep(
@@ -218,10 +215,7 @@ class ArrayStepShared(BlockedStep):
 
         new_point = DictToArrayBijection.rmap(apoint, start_point=point)
 
-        if self.generates_stats:
-            return new_point, stats
-
-        return new_point
+        return (new_point, stats) if self.generates_stats else new_point
 
 
 class PopulationArrayStepShared(ArrayStepShared):
@@ -256,13 +250,11 @@ class PopulationArrayStepShared(ArrayStepShared):
         self.population = population
         self.this_chain = chain_index
         self.other_chains = [c for c in range(len(population)) if c != chain_index]
-        if not len(self.other_chains) > 1:
+        if len(self.other_chains) <= 1:
             raise ValueError(
-                "Population is just {} + {}. "
-                "This is too small and the error should have been raised earlier.".format(
-                    self.this_chain, self.other_chains
-                )
+                f"Population is just {self.this_chain} + {self.other_chains}. This is too small and the error should have been raised earlier."
             )
+
         return
 
 
@@ -306,7 +298,4 @@ def metrop_select(mr, q, q0):
     # Compare acceptance ratio to uniform random number
     # TODO XXX: This `uniform` is not given a model-specific RNG state, which
     # means that sampler runs that use it will not be reproducible.
-    if np.isfinite(mr) and np.log(uniform()) < mr:
-        return q, True
-    else:
-        return q0, False
+    return (q, True) if np.isfinite(mr) and np.log(uniform()) < mr else (q0, False)

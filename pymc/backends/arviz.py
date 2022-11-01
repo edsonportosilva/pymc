@@ -209,7 +209,7 @@ class InferenceDataConverter:  # pylint: disable=too-many-instance-attributes
         # Make coord types more rigid
         untyped_coords: Dict[str, Optional[Sequence[Any]]] = {**self.model.coords}
         if coords:
-            untyped_coords.update(coords)
+            untyped_coords |= coords
         self.coords = {
             cname: np.array(cvals) if isinstance(cvals, tuple) else cvals
             for cname, cvals in untyped_coords.items()
@@ -238,12 +238,10 @@ class InferenceDataConverter:  # pylint: disable=too-many-instance-attributes
             The slice of the trace corresponding to the warmup. If the warmup trace is
             empty or ``save_warmup=False``, None is returned
         """
-        trace_posterior = None
         trace_warmup = None
         if self.save_warmup and self.ntune > 0:
             trace_warmup = self.trace[: self.ntune]
-        if self.ndraws > 0:
-            trace_posterior = self.trace[self.ntune :]
+        trace_posterior = self.trace[self.ntune :] if self.ndraws > 0 else None
         return trace_posterior, trace_warmup
 
     def log_likelihood_vals_point(self, point, var, log_like_fun):
@@ -461,11 +459,8 @@ class InferenceDataConverter:  # pylint: disable=too-many-instance-attributes
             prior_vars = list(self.prior.keys())
             prior_predictive_vars = None
 
-        priors_dict = {}
-        for group, var_names in zip(
-            ("prior", "prior_predictive"), (prior_vars, prior_predictive_vars)
-        ):
-            priors_dict[group] = (
+        return {
+            group: (
                 None
                 if var_names is None
                 else dict_to_dataset(
@@ -475,7 +470,10 @@ class InferenceDataConverter:  # pylint: disable=too-many-instance-attributes
                     dims=self.dims,
                 )
             )
-        return priors_dict
+            for group, var_names in zip(
+                ("prior", "prior_predictive"), (prior_vars, prior_predictive_vars)
+            )
+        }
 
     @requires("observations")
     @requires("model")
@@ -495,15 +493,16 @@ class InferenceDataConverter:  # pylint: disable=too-many-instance-attributes
     def constant_data_to_xarray(self):
         """Convert constant data to xarray."""
         constant_data = find_constants(self.model)
-        if not constant_data:
-            return None
-
-        return dict_to_dataset(
-            constant_data,
-            library=pymc,
-            coords=self.coords,
-            dims=self.dims,
-            default_dims=[],
+        return (
+            dict_to_dataset(
+                constant_data,
+                library=pymc,
+                coords=self.coords,
+                dims=self.dims,
+                default_dims=[],
+            )
+            if constant_data
+            else None
         )
 
     def to_inference_data(self):

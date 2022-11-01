@@ -166,14 +166,13 @@ def get_or_compute_grads(loss_or_grads, params):
             "contains arbitrary parameter expressions, then "
             "lasagne.utils.collect_shared_vars() may help you."
         )
-    if isinstance(loss_or_grads, list):
-        if not len(loss_or_grads) == len(params):
-            raise ValueError(
-                "Got %d gradient expressions for %d parameters" % (len(loss_or_grads), len(params))
-            )
-        return loss_or_grads
-    else:
+    if not isinstance(loss_or_grads, list):
         return aesara.grad(loss_or_grads, params)
+    if len(loss_or_grads) != len(params):
+        raise ValueError(
+            "Got %d gradient expressions for %d parameters" % (len(loss_or_grads), len(params))
+        )
+    return loss_or_grads
 
 
 def _get_call_kwargs(_locals_):
@@ -1010,15 +1009,14 @@ def norm_constraint(tensor_var, max_norm, norm_axes=None, epsilon=1e-7):
         sum_over = tuple(range(1, ndim))
     else:
         raise ValueError(
-            "Unsupported tensor dimensionality {}." "Must specify `norm_axes`".format(ndim)
+            f"Unsupported tensor dimensionality {ndim}.Must specify `norm_axes`"
         )
+
 
     dtype = np.dtype(aesara.config.floatX).type
     norms = at.sqrt(at.sum(at.sqr(tensor_var), axis=sum_over, keepdims=True))
     target_norms = at.clip(norms, 0, dtype(max_norm))
-    constrained_output = tensor_var * (target_norms / (dtype(epsilon) + norms))
-
-    return constrained_output
+    return tensor_var * (target_norms / (dtype(epsilon) + norms))
 
 
 def total_norm_constraint(tensor_vars, max_norm, epsilon=1e-7, return_norm=False):
@@ -1082,7 +1080,4 @@ def total_norm_constraint(tensor_vars, max_norm, epsilon=1e-7, return_norm=False
     multiplier = target_norm / (dtype(epsilon) + norm)
     tensor_vars_scaled = [step * multiplier for step in tensor_vars]
 
-    if return_norm:
-        return tensor_vars_scaled, norm
-    else:
-        return tensor_vars_scaled
+    return (tensor_vars_scaled, norm) if return_norm else tensor_vars_scaled

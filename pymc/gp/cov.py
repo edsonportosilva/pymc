@@ -80,10 +80,7 @@ class Covariance:
             Return only the diagonal of the covariance function.
             Default is False.
         """
-        if diag:
-            return self.diag(X)
-        else:
-            return self.full(X, Xs)
+        return self.diag(X) if diag else self.full(X, Xs)
 
     def diag(self, X):
         raise NotImplementedError
@@ -247,10 +244,7 @@ class Kron(Covariance):
     def _split(self, X, Xs):
         indices = np.cumsum(self.input_dims)
         X_split = np.hsplit(X, indices)
-        if Xs is not None:
-            Xs_split = np.hsplit(Xs, indices)
-        else:
-            Xs_split = [None] * len(X_split)
+        Xs_split = np.hsplit(Xs, indices) if Xs is not None else [None] * len(X_split)
         return X_split, Xs_split
 
     def __call__(self, X, Xs=None, diag=False):
@@ -343,10 +337,7 @@ class Circular(Covariance):
         self.tau = tau
 
     def dist(self, X, Xs):
-        if Xs is None:
-            Xs = at.transpose(X)
-        else:
-            Xs = at.transpose(Xs)
+        Xs = at.transpose(X) if Xs is None else at.transpose(Xs)
         return at.abs((X - Xs + self.c) % (self.c * 2) - self.c)
 
     def weinland(self, t):
@@ -572,9 +563,8 @@ class Linear(Covariance):
         X, Xc, Xs = self._common(X, Xs)
         if Xs is None:
             return at.dot(Xc, at.transpose(Xc))
-        else:
-            Xsc = at.sub(Xs, self.c)
-            return at.dot(Xc, at.transpose(Xsc))
+        Xsc = at.sub(Xs, self.c)
+        return at.dot(Xc, at.transpose(Xsc))
 
     def diag(self, X):
         X, Xc, _ = self._common(X, None)
@@ -662,12 +652,13 @@ class Gibbs(Covariance):
 
     def __init__(self, input_dim, lengthscale_func, args=None, active_dims=None):
         super().__init__(input_dim, active_dims)
-        if active_dims is not None:
-            if len(active_dims) > 1:
-                raise NotImplementedError(("Higher dimensional inputs ", "are untested"))
-        else:
-            if input_dim != 1:
-                raise NotImplementedError(("Higher dimensional inputs ", "are untested"))
+        if (
+            active_dims is not None
+            and len(active_dims) > 1
+            or active_dims is None
+            and input_dim != 1
+        ):
+            raise NotImplementedError(("Higher dimensional inputs ", "are untested"))
         if not callable(lengthscale_func):
             raise TypeError("lengthscale_func must be callable")
         self.lfunc = handle_args(lengthscale_func, args)
@@ -743,9 +734,8 @@ class ScaledCov(Covariance):
         scf_x = self.scaling_func(X, self.args)
         if Xs is None:
             return at.outer(scf_x, scf_x) * self.cov_func(X)
-        else:
-            scf_xs = self.scaling_func(Xs, self.args)
-            return at.outer(scf_x, scf_xs) * self.cov_func(X, Xs)
+        scf_xs = self.scaling_func(Xs, self.args)
+        return at.outer(scf_x, scf_xs) * self.cov_func(X, Xs)
 
 
 class Coregion(Covariance):
@@ -800,10 +790,7 @@ class Coregion(Covariance):
     def full(self, X, Xs=None):
         X, Xs = self._slice(X, Xs)
         index = at.cast(X, "int32")
-        if Xs is None:
-            index2 = index.T
-        else:
-            index2 = at.cast(Xs, "int32").T
+        index2 = index.T if Xs is None else at.cast(Xs, "int32").T
         return self.B[index, index2]
 
     def diag(self, X):
@@ -816,9 +803,8 @@ def handle_args(func, args):
     def f(x, args):
         if args is None:
             return func(x)
-        else:
-            if not isinstance(args, tuple):
-                args = (args,)
-            return func(x, *args)
+        if not isinstance(args, tuple):
+            args = (args,)
+        return func(x, *args)
 
     return f

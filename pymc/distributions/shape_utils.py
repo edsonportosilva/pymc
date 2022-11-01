@@ -53,10 +53,7 @@ def to_tuple(shape):
     if shape is None:
         return tuple()
     temp = np.atleast_1d(shape)
-    if temp.size == 0:
-        return tuple()
-    else:
-        return tuple(temp)
+    return tuple() if temp.size == 0 else tuple(temp)
 
 
 def _check_shape_type(shape):
@@ -99,7 +96,7 @@ def shapes_broadcasting(*args, raise_exception=False):
         y = list(_check_shape_type(arg))
         if len(x) < len(y):
             x, y = y, x
-        if len(y) > 0:
+        if y:
             x[-len(y) :] = [
                 j if i == 1 else i if j == 1 else i if i == j else 0
                 for i, j in zip(x[-len(y) :], y)
@@ -107,10 +104,9 @@ def shapes_broadcasting(*args, raise_exception=False):
         if not all(x):
             if raise_exception:
                 raise ValueError(
-                    "Supplied shapes {} do not broadcast together".format(
-                        ", ".join([f"{a}" for a in args])
-                    )
+                    f'Supplied shapes {", ".join([f"{a}" for a in args])} do not broadcast together'
                 )
+
             else:
                 return None
     return tuple(x)
@@ -169,10 +165,9 @@ def broadcast_dist_samples_shape(shapes, size=None):
         broadcasted_shape = shapes_broadcasting(*shapes)
         if broadcasted_shape is None:
             raise ValueError(
-                "Cannot broadcast provided shapes {} given size: {}".format(
-                    ", ".join([f"{s}" for s in shapes]), size
-                )
+                f'Cannot broadcast provided shapes {", ".join([f"{s}" for s in shapes])} given size: {size}'
             )
+
         return broadcasted_shape
     shapes = [_check_shape_type(s) for s in shapes]
     _size = to_tuple(size)
@@ -182,10 +177,9 @@ def broadcast_dist_samples_shape(shapes, size=None):
         broadcast_shape = shapes_broadcasting(*sp_shapes, raise_exception=True)
     except ValueError:
         raise ValueError(
-            "Cannot broadcast provided shapes {} given size: {}".format(
-                ", ".join([f"{s}" for s in shapes]), size
-            )
+            f'Cannot broadcast provided shapes {", ".join([f"{s}" for s in shapes])} given size: {size}'
         )
+
     broadcastable_shapes = []
     for shape, sp_shape in zip(shapes, sp_shapes):
         if _size == shape[: len(_size)]:
@@ -490,9 +484,9 @@ def shape_from_dims(
     """
     ndim_resize = len(dims) - len(shape_implied)
 
-    # Dims must be known already or be inferrable from implied dimensions of the RV
-    unknowndim_resize_dims = set(dims[:ndim_resize]) - set(model.dim_lengths)
-    if unknowndim_resize_dims:
+    if unknowndim_resize_dims := set(dims[:ndim_resize]) - set(
+        model.dim_lengths
+    ):
         raise KeyError(
             f"Dimensions {unknowndim_resize_dims} are unknown to the model and cannot be used to specify a `size`."
         )

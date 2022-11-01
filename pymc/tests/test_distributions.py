@@ -281,7 +281,7 @@ def build_model(distfam, valuedomain, vardomains, extra_args=None):
             v_at = aesara.shared(np.asarray(dom.vals[0]))
             v_at.name = v
             param_vars[v] = v_at
-        param_vars.update(extra_args)
+        param_vars |= extra_args
         distfam(
             "value",
             **param_vars,
@@ -636,7 +636,7 @@ def laplace_asymmetric_logpdf(value, kappa, b, mu):
 
 
 def integrate_nd(f, domain, shape, dtype):
-    if shape == () or shape == (1,):
+    if shape in [(), (1,)]:
         if dtype in continuous_types:
             return integrate.quad(f, domain.lower, domain.upper, epsabs=1e-8)[0]
         else:
@@ -668,11 +668,11 @@ def integrate_nd(f, domain, shape, dtype):
             lambda _, __: domain.upper[2],
         )[0]
     else:
-        raise ValueError("Dont know how to integrate shape: " + str(shape))
+        raise ValueError(f"Dont know how to integrate shape: {str(shape)}")
 
 
 def _dirichlet_multinomial_logpmf(value, n, a):
-    if value.sum() == n and (0 <= value).all() and (value <= n).all():
+    if value.sum() == n and (value >= 0).all() and (value <= n).all():
         sum_a = a.sum()
         const = gammaln(n + 1) + gammaln(sum_a) - gammaln(n + sum_a)
         series = gammaln(value + a) - gammaln(value + 1) - gammaln(a)
@@ -708,26 +708,20 @@ def Vector(D, n):
 
 
 def SortedVector(n):
-    vals = []
     np.random.seed(42)
-    for _ in range(10):
-        vals.append(np.sort(np.random.randn(n)))
+    vals = [np.sort(np.random.randn(n)) for _ in range(10)]
     return Domain(vals, edges=(None, None))
 
 
 def UnitSortedVector(n):
-    vals = []
     np.random.seed(42)
-    for _ in range(10):
-        vals.append(np.sort(np.random.rand(n)))
+    vals = [np.sort(np.random.rand(n)) for _ in range(10)]
     return Domain(vals, edges=(None, None))
 
 
 def RealMatrix(n, m):
-    vals = []
     np.random.seed(42)
-    for _ in range(10):
-        vals.append(np.random.randn(n, m))
+    vals = [np.random.randn(n, m) for _ in range(10)]
     return Domain(vals, edges=(None, None))
 
 
@@ -862,9 +856,12 @@ def Simplex(n):
 
 
 def MultiSimplex(n_dependent, n_independent):
-    vals = []
-    for simplex_value in itertools.product(simplex_values(n_dependent), repeat=n_independent):
-        vals.append(np.vstack(simplex_value))
+    vals = [
+        np.vstack(simplex_value)
+        for simplex_value in itertools.product(
+            simplex_values(n_dependent), repeat=n_independent
+        )
+    ]
 
     return Domain(vals, dtype=Unit.dtype, shape=(n_independent, n_dependent))
 
@@ -934,7 +931,7 @@ def test_hierarchical_logp():
 
     logp_ancestors = list(ancestors([m.logp()]))
     ops = {a.owner.op for a in logp_ancestors if a.owner}
-    assert len(ops) > 0
+    assert ops
     assert not any(isinstance(o, RandomVariable) for o in ops)
     assert x.tag.value_var in logp_ancestors
     assert y.tag.value_var in logp_ancestors
@@ -949,7 +946,7 @@ def test_hierarchical_obs_logp():
 
     logp_ancestors = list(ancestors([model.logp()]))
     ops = {a.owner.op for a in logp_ancestors if a.owner}
-    assert len(ops) > 0
+    assert ops
     assert not any(isinstance(o, RandomVariable) for o in ops)
 
 
@@ -1291,7 +1288,7 @@ class TestMatchesScipy:
         def modified_scipy_hypergeom_logpmf(value, N, k, n):
             # Convert nan to -np.inf
             original_res = sp.hypergeom.logpmf(value, N, k, n)
-            return original_res if not np.isnan(original_res) else -np.inf
+            return -np.inf if np.isnan(original_res) else original_res
 
         def modified_scipy_hypergeom_logcdf(value, N, k, n):
             # Convert nan to -np.inf
@@ -1303,7 +1300,7 @@ class TestMatchesScipy:
                 if np.all(np.isnan(pmfs)):
                     original_res = np.nan
 
-            return original_res if not np.isnan(original_res) else -np.inf
+            return -np.inf if np.isnan(original_res) else original_res
 
         check_logp(
             HyperGeometric,
@@ -3026,10 +3023,7 @@ def test_car_logp(sparse, size):
     # up to an additive constant which is independent of the CAR parameters
     delta_logp = scipy_logp - car_logp
 
-    # Check to make sure all the delta values are identical.
-    tol = 1e-08
-    if aesara.config.floatX == "float32":
-        tol = 1e-5
+    tol = 1e-5 if aesara.config.floatX == "float32" else 1e-08
     assert np.allclose(delta_logp - delta_logp[0], 0.0, atol=tol)
 
 
@@ -3069,7 +3063,7 @@ def test_car_matrix_check(sparse):
 
 
 class TestBugfixes:
-    @pytest.mark.parametrize("dist_cls,kwargs", [(MvNormal, dict()), (MvStudentT, dict(nu=2))])
+    @pytest.mark.parametrize("dist_cls,kwargs", [(MvNormal, {}), (MvStudentT, dict(nu=2))])
     @pytest.mark.parametrize("dims", [1, 2, 4])
     def test_issue_3051(self, dims, dist_cls, kwargs):
         mu = np.repeat(0, dims)
@@ -3163,7 +3157,6 @@ def test_logp_gives_migration_instructions(method, newcode):
         f = getattr(rv, method)
         with pytest.raises(AttributeError, match=rf"use `{newcode}`"):
             f()
-    pass
 
 
 def test_density_dist_old_api_error():
@@ -3233,7 +3226,7 @@ class TestCensored:
             posterior = pm.sample(tune=500, draws=500, random_seed=rng)
             posterior_pred = pm.sample_posterior_predictive(posterior, random_seed=rng)
 
-        expected = True if censored else False
+        expected = bool(censored)
         assert (9 < prior_pred.prior_predictive.mean() < 10) == expected
         assert (13 < posterior.posterior["mu"].mean() < 14) == expected
         assert (4.5 < posterior.posterior["sigma"].mean() < 5.5) == expected

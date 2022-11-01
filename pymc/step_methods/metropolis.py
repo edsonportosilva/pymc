@@ -182,7 +182,7 @@ class Metropolis(ArrayStepShared):
         elif S.ndim == 2:
             self.proposal_dist = MultivariateNormalProposal(S)
         else:
-            raise ValueError("Invalid rank for variance: %s" % S.ndim)
+            raise ValueError(f"Invalid rank for variance: {S.ndim}")
 
         self.scaling = np.atleast_1d(scaling).astype("d")
         self.tune = tune
@@ -387,7 +387,7 @@ class BinaryMetropolis(ArrayStep):
 
         vars = [model.rvs_to_values.get(var, var) for var in vars]
 
-        if not all([v.dtype in pm.discrete_types for v in vars]):
+        if any(v.dtype not in pm.discrete_types for v in vars):
             raise ValueError("All variables must be Bernoulli for BinaryMetropolis")
 
         super().__init__(vars, [model.compile_logp()])
@@ -488,7 +488,7 @@ class BinaryGibbsMetropolis(ArrayStep):
             self.shuffle_dims = False
             self.order = order
 
-        if not all([v.dtype in pm.discrete_types for v in vars]):
+        if any(v.dtype not in pm.discrete_types for v in vars):
             raise ValueError("All variables must be binary for BinaryGibbsMetropolis")
 
         super().__init__(vars, [model.compile_logp()])

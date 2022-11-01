@@ -185,19 +185,7 @@ def model_test_idata_kwargs() -> pm.Model:
         sample_numpyro_nuts,
     ],
 )
-@pytest.mark.parametrize(
-    "idata_kwargs",
-    [
-        dict(),
-        dict(log_likelihood=False),
-        # Overwrite models coords
-        dict(coords={"x_coord": ["x1", "x2"]}),
-        # Overwrite dims from dist specification in model
-        dict(dims={"x": ["x_coord2"]}),
-        # Overwrite both coords and dims
-        dict(coords={"x_coord3": ["A", "B"]}, dims={"x": ["x_coord3"]}),
-    ],
-)
+@pytest.mark.parametrize("idata_kwargs", [{}, dict(log_likelihood=False), dict(coords={"x_coord": ["x1", "x2"]}), dict(dims={"x": ["x_coord2"]}), dict(coords={"x_coord3": ["A", "B"]}, dims={"x": ["x_coord3"]})])
 @pytest.mark.parametrize("postprocessing_backend", [None, "cpu"])
 def test_idata_kwargs(
     model_test_idata_kwargs: pm.Model,

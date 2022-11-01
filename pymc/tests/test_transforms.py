@@ -97,10 +97,11 @@ def check_jacobian_det(
     if make_comparable:
         x = make_comparable(x)
 
-    if not elemwise:
-        jac = at.log(at.nlinalg.det(jacobian(x, [y])))
-    else:
-        jac = at.log(at.abs(at.diag(jacobian(x, [y]))))
+    jac = (
+        at.log(at.abs(at.diag(jacobian(x, [y]))))
+        if elemwise
+        else at.log(at.nlinalg.det(jacobian(x, [y])))
+    )
 
     # ljd = log jacobian det
     actual_ljd = aesara.function([y], jac)

@@ -309,7 +309,7 @@ def test_convert_observed_data(input_dtype):
     assert isinstance(aesara_output, Variable)
     npt.assert_allclose(aesara_output.eval(), aesara_graph_input.eval())
     intX = pm.aesaraf._conversion_map[aesara.config.floatX]
-    if dense_input.dtype == intX or dense_input.dtype == aesara.config.floatX:
+    if dense_input.dtype in [intX, aesara.config.floatX]:
         assert aesara_output.owner is None  # func should not have added new nodes
         assert aesara_output.name == input_name
     else:
@@ -398,7 +398,7 @@ def test_rvs_to_value_vars():
     ]
 
     # There shouldn't be any `RandomVariable`s in the resulting graph
-    assert len(res_rv_ancestors) == 0
+    assert not res_rv_ancestors
     assert b_value_var in res_ancestors
     assert c_value_var in res_ancestors
     assert a_value_var not in res_ancestors
@@ -410,7 +410,7 @@ def test_rvs_to_value_vars():
         v for v in res_ancestors if v.owner and isinstance(v.owner.op, RandomVariable)
     ]
 
-    assert len(res_rv_ancestors) == 0
+    assert not res_rv_ancestors
     assert a_value_var in res_ancestors
     assert b_value_var in res_ancestors
     assert c_value_var in res_ancestors

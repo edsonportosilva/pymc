@@ -79,11 +79,11 @@ class MultinomialA(Discrete):
     def dist(cls, n, p, *args, **kwargs):
         return super().dist([n, p], **kwargs)
 
-    def logp(value, n, p):
+    def logp(self, n, p):
         return check_parameters(
-            factln(n) - factln(value).sum() + (value * at.log(p)).sum(),
-            value >= 0,
-            0 <= p,
+            factln(n) - factln(self).sum() + (self * at.log(p)).sum(),
+            self >= 0,
+            p >= 0,
             p <= 1,
             at.isclose(p.sum(), 1),
         )
@@ -96,11 +96,11 @@ class MultinomialB(Discrete):
     def dist(cls, n, p, *args, **kwargs):
         return super().dist([n, p], **kwargs)
 
-    def logp(value, n, p):
+    def logp(self, n, p):
         return check_parameters(
-            factln(n) - factln(value).sum() + (value * at.log(p)).sum(),
-            at.all(value >= 0),
-            at.all(0 <= p),
+            factln(n) - factln(self).sum() + (self * at.log(p)).sum(),
+            at.all(self >= 0),
+            at.all(p >= 0),
             at.all(p <= 1),
             at.isclose(p.sum(), 1),
         )

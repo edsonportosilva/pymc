@@ -128,7 +128,7 @@ def quaddist_matrix(cov=None, chol=None, tau=None, lower=True, *args, **kwargs):
 def quaddist_parse(value, mu, cov, mat_type="cov"):
     """Compute (x - mu).T @ Sigma^-1 @ (x - mu) and the logdet of Sigma."""
     if value.ndim > 2 or value.ndim == 0:
-        raise ValueError("Invalid dimension for value: %s" % value.ndim)
+        raise ValueError(f"Invalid dimension for value: {value.ndim}")
     if value.ndim == 1:
         onedim = True
         value = value[None, :]
@@ -143,10 +143,7 @@ def quaddist_parse(value, mu, cov, mat_type="cov"):
         dist, logdet, ok = quaddist_chol(delta, chol_cov)
     else:
         dist, logdet, ok = quaddist_tau(delta, chol_cov)
-    if onedim:
-        return dist[0], logdet, ok
-
-    return dist, logdet, ok
+    return (dist[0], logdet, ok) if onedim else (dist, logdet, ok)
 
 
 def quaddist_chol(delta, chol_mat):
@@ -251,14 +248,14 @@ class MvNormal(Continuous):
         mu = at.broadcast_arrays(mu, cov[..., -1])[0]
         return super().dist([mu, cov], **kwargs)
 
-    def moment(rv, size, mu, cov):
+    def moment(self, size, mu, cov):
         moment = mu
         if not rv_size_is_none(size):
             moment_size = at.concatenate([size, [mu.shape[-1]]])
             moment = at.full(moment_size, mu)
         return moment
 
-    def logp(value, mu, cov):
+    def logp(self, mu, cov):
         """
         Calculate log-probability of Multivariate Normal distribution
         at specified value.
@@ -272,8 +269,8 @@ class MvNormal(Continuous):
         -------
         TensorVariable
         """
-        quaddist, logdet, ok = quaddist_parse(value, mu, cov)
-        k = floatX(value.shape[-1])
+        quaddist, logdet, ok = quaddist_parse(self, mu, cov)
+        k = floatX(self.shape[-1])
         norm = -0.5 * k * pm.floatX(np.log(2 * np.pi))
         return check_parameters(norm - 0.5 * quaddist - logdet, ok)
 
@@ -287,7 +284,7 @@ class MvStudentTRV(RandomVariable):
 
     def make_node(self, rng, size, dtype, nu, mu, cov):
         nu = at.as_tensor_variable(nu)
-        if not nu.ndim == 0:
+        if nu.ndim != 0:
             raise ValueError("nu must be a scalar (ndim=0).")
 
         return super().make_node(rng, size, dtype, nu, mu, cov)
@@ -387,14 +384,14 @@ class MvStudentT(Continuous):
 
         return super().dist([nu, mu, scale], **kwargs)
 
-    def moment(rv, size, nu, mu, scale):
+    def moment(self, size, nu, mu, scale):
         moment = mu
         if not rv_size_is_none(size):
             moment_size = at.concatenate([size, [mu.shape[-1]]])
             moment = at.full(moment_size, moment)
         return moment
 
-    def logp(value, nu, mu, scale):
+    def logp(self, nu, mu, scale):
         """
         Calculate log-probability of Multivariate Student's T distribution
         at specified value.
@@ -408,8 +405,8 @@ class MvStudentT(Continuous):
         -------
         TensorVariable
         """
-        quaddist, logdet, ok = quaddist_parse(value, mu, scale)
-        k = floatX(value.shape[-1])
+        quaddist, logdet, ok = quaddist_parse(self, mu, scale)
+        k = floatX(self.shape[-1])
 
         norm = gammaln((nu + k) / 2.0) - gammaln(nu / 2.0) - 0.5 * k * at.log(nu * np.pi)
         inner = -(nu + k) / 2.0 * at.log1p(quaddist / nu)
@@ -456,14 +453,14 @@ class Dirichlet(SimplexContinuous):
 
         return super().dist([a], **kwargs)
 
-    def moment(rv, size, a):
+    def moment(self, size, a):
         norm_constant = at.sum(a, axis=-1)[..., None]
         moment = a / norm_constant
         if not rv_size_is_none(size):
             moment = at.full(at.concatenate([size, [a.shape[-1]]]), moment)
         return moment
 
-    def logp(value, a):
+    def logp(self, a):
         """
         Calculate log-probability of Dirichlet distribution
         at specified value.
@@ -478,15 +475,18 @@ class Dirichlet(SimplexContinuous):
         TensorVariable
         """
         # only defined for sum(value) == 1
-        res = at.sum(logpow(value, a - 1) - gammaln(a), axis=-1) + gammaln(at.sum(a, axis=-1))
+        res = at.sum(logpow(self, a - 1) - gammaln(a), axis=-1) + gammaln(
+            at.sum(a, axis=-1)
+        )
+
         res = at.switch(
             at.or_(
-                at.any(at.lt(value, 0), axis=-1),
-                at.any(at.gt(value, 1), axis=-1),
+                at.any(at.lt(self, 0), axis=-1), at.any(at.gt(self, 1), axis=-1)
             ),
             -np.inf,
             res,
         )
+
         return check_parameters(
             res,
             a > 0,
@@ -529,7 +529,7 @@ class Multinomial(Discrete):
 
     @classmethod
     def dist(cls, n, p, *args, **kwargs):
-        if isinstance(p, np.ndarray) or isinstance(p, list):
+        if isinstance(p, (np.ndarray, list)):
             if (np.asarray(p) < 0).any():
                 raise ValueError(f"Negative `p` parameters are not valid, got: {p}")
             p_sum = np.sum([p], axis=-1)
@@ -543,7 +543,7 @@ class Multinomial(Discrete):
         p = at.as_tensor_variable(p)
         return super().dist([n, p], *args, **kwargs)
 
-    def moment(rv, size, n, p):
+    def moment(self, size, n, p):
         n = at.shape_padright(n)
         mode = at.round(n * p)
         diff = n - at.sum(mode, axis=-1, keepdims=True)
@@ -554,7 +554,7 @@ class Multinomial(Discrete):
             mode = at.full(output_size, mode)
         return mode
 
-    def logp(value, n, p):
+    def logp(self, n, p):
         """
         Calculate log-probability of Multinomial distribution
         at specified value.
@@ -569,12 +569,15 @@ class Multinomial(Discrete):
         TensorVariable
         """
 
-        res = factln(n) + at.sum(-factln(value) + logpow(p, value), axis=-1)
+        res = factln(n) + at.sum(-factln(self) + logpow(p, self), axis=-1)
         res = at.switch(
-            at.or_(at.any(at.lt(value, 0), axis=-1), at.neq(at.sum(value, axis=-1), n)),
+            at.or_(
+                at.any(at.lt(self, 0), axis=-1), at.neq(at.sum(self, axis=-1), n)
+            ),
             -np.inf,
             res,
         )
+
         return check_parameters(
             res,
             p <= 1,
@@ -601,9 +604,7 @@ class DirichletMultinomialRV(RandomVariable):
 
         if n.ndim > 0 or a.ndim > 1:
             n, a = broadcast_params([n, a], cls.ndims_params)
-            size = tuple(size or ())
-
-            if size:
+            if size := tuple(size or ()):
                 n = np.broadcast_to(n, size)
                 a = np.broadcast_to(a, size + (a.shape[-1],))
 
@@ -611,7 +612,6 @@ class DirichletMultinomialRV(RandomVariable):
             for idx in np.ndindex(a.shape[:-1]):
                 p = rng.dirichlet(a[idx])
                 res[idx] = rng.multinomial(n[idx], p)
-            return res
         else:
             # n is a scalar, a is a 1d array
             p = rng.dirichlet(a, size=size)  # (size, a.shape)
@@ -620,7 +620,8 @@ class DirichletMultinomialRV(RandomVariable):
             for idx in np.ndindex(p.shape[:-1]):
                 res[idx] = rng.multinomial(n, p[idx])
 
-            return res
+
+        return res
 
 
 dirichlet_multinomial = DirichletMultinomialRV()
@@ -663,11 +664,11 @@ class DirichletMultinomial(Discrete):
 
         return super().dist([n, a], **kwargs)
 
-    def moment(rv, size, n, a):
+    def moment(self, size, n, a):
         p = a / at.sum(a, axis=-1, keepdims=True)
         return moment(Multinomial.dist(n=n, p=p, size=size))
 
-    def logp(value, n, a):
+    def logp(self, n, a):
         """
         Calculate log-probability of DirichletMultinomial distribution
         at specified value.
@@ -683,17 +684,17 @@ class DirichletMultinomial(Discrete):
         """
         sum_a = a.sum(axis=-1)
         const = (gammaln(n + 1) + gammaln(sum_a)) - gammaln(n + sum_a)
-        series = gammaln(value + a) - (gammaln(value + 1) + gammaln(a))
+        series = gammaln(self + a) - (gammaln(self + 1) + gammaln(a))
         res = const + series.sum(axis=-1)
 
         res = at.switch(
             at.or_(
-                at.any(at.lt(value, 0), axis=-1),
-                at.neq(at.sum(value, axis=-1), n),
+                at.any(at.lt(self, 0), axis=-1), at.neq(at.sum(self, axis=-1), n)
             ),
             -np.inf,
             res,
         )
+
 
         return check_parameters(
             res,
@@ -882,12 +883,9 @@ class WishartRV(RandomVariable):
 
     @classmethod
     def rng_fn(cls, rng, nu, V, size):
-        scipy_size = size if size else 1  # Default size for Scipy's wishart.rvs is 1
+        scipy_size = size or 1
         result = stats.wishart.rvs(int(nu), V, size=scipy_size, random_state=rng)
-        if size == (1,):
-            return result[np.newaxis, ...]
-        else:
-            return result
+        return result[np.newaxis, ...] if size == (1,) else result
 
 
 wishart = WishartRV()
@@ -951,7 +949,7 @@ class Wishart(Continuous):
         # mode = at.switch(at.ge(nu, p + 1), (nu - p - 1) * V, np.nan)
         return super().dist([nu, V], *args, **kwargs)
 
-    def logp(X, nu, V):
+    def logp(self, nu, V):
         """
         Calculate log-probability of Wishart distribution
         at specified value.
@@ -969,19 +967,21 @@ class Wishart(Continuous):
         p = V.shape[0]
 
         IVI = det(V)
-        IXI = det(X)
+        IXI = det(self)
 
         return check_parameters(
             (
-                (nu - p - 1) * at.log(IXI)
-                - trace(matrix_inverse(V).dot(X))
-                - nu * p * at.log(2)
-                - nu * at.log(IVI)
-                - 2 * multigammaln(nu / 2.0, p)
-            )
-            / 2,
-            matrix_pos_def(X),
-            at.eq(X, X.T),
+                (
+                    (nu - p - 1) * at.log(IXI)
+                    - trace(matrix_inverse(V).dot(self))
+                    - nu * p * at.log(2)
+                    - nu * at.log(IVI)
+                    - 2 * multigammaln(nu / 2.0, p)
+                )
+                / 2
+            ),
+            matrix_pos_def(self),
+            at.eq(self, self.T),
             nu > (p - 1),
         )
 
@@ -1051,11 +1051,17 @@ def WishartBartlett(name, S, nu, is_cholesky=False, return_cholesky=False, initv
         tril_testval = None
 
     c = at.sqrt(
-        ChiSquared("%s_c" % name, nu - np.arange(2, 2 + n_diag), shape=n_diag, initval=diag_testval)
+        ChiSquared(
+            f"{name}_c",
+            nu - np.arange(2, 2 + n_diag),
+            shape=n_diag,
+            initval=diag_testval,
+        )
     )
-    pm._log.info("Added new variable %s_c to model diagonal of Wishart." % name)
-    z = Normal("%s_z" % name, 0.0, 1.0, shape=n_tril, initval=tril_testval)
-    pm._log.info("Added new variable %s_z to model off-diagonals of Wishart." % name)
+
+    pm._log.info(f"Added new variable {name}_c to model diagonal of Wishart.")
+    z = Normal(f"{name}_z", 0.0, 1.0, shape=n_tril, initval=tril_testval)
+    pm._log.info(f"Added new variable {name}_z to model off-diagonals of Wishart.")
     # Construct A matrix
     A = at.zeros(S.shape, dtype=np.float32)
     A = at.set_subtensor(A[diag_idx], c)
@@ -1105,11 +1111,11 @@ class _LKJCholeskyCovRV(RandomVariable):
 
     def make_node(self, rng, size, dtype, n, eta, D):
         n = at.as_tensor_variable(n)
-        if not n.ndim == 0:
+        if n.ndim != 0:
             raise ValueError("n must be a scalar (ndim=0).")
 
         eta = at.as_tensor_variable(eta)
-        if not eta.ndim == 0:
+        if eta.ndim != 0:
             raise ValueError("eta must be a scalar (ndim=0).")
 
         D = at.as_tensor_variable(D)
@@ -1131,16 +1137,11 @@ class _LKJCholeskyCovRV(RandomVariable):
 
     def _infer_shape(self, size, dist_params, param_shapes=None):
         n = dist_params[0]
-        dist_shape = tuple(size) + ((n * (n + 1)) // 2,)
-        return dist_shape
+        return tuple(size) + ((n * (n + 1)) // 2,)
 
     def rng_fn(self, rng, n, eta, D, size):
         # We flatten the size to make operations easier, and then rebuild it
-        if size is None:
-            flat_size = 1
-        else:
-            flat_size = np.prod(size)
-
+        flat_size = 1 if size is None else np.prod(size)
         C = LKJCorrRV._random_corr_matrix(rng, n, eta, flat_size)
 
         D = D.reshape(flat_size, n)
@@ -1192,13 +1193,13 @@ class _LKJCholeskyCov(Continuous):
 
         return super().dist([n, eta, sd_dist], **kwargs)
 
-    def moment(rv, size, n, eta, sd_dists):
+    def moment(self, size, n, eta, sd_dists):
         diag_idxs = (at.cumsum(at.arange(1, n + 1)) - 1).astype("int32")
-        moment = at.zeros_like(rv)
+        moment = at.zeros_like(self)
         moment = at.set_subtensor(moment[..., diag_idxs], 1)
         return moment
 
-    def logp(value, n, eta, sd_dist):
+    def logp(self, n, eta, sd_dist):
         """
         Calculate log-probability of Covariance matrix with LKJ
         distributed correlations at specified value.
@@ -1213,18 +1214,18 @@ class _LKJCholeskyCov(Continuous):
         TensorVariable
         """
 
-        if value.ndim > 1:
+        if self.ndim > 1:
             raise ValueError("LKJCholeskyCov logp is only implemented for vector values (ndim=1)")
 
         diag_idxs = at.cumsum(at.arange(1, n + 1)) - 1
-        cumsum = at.cumsum(value**2)
+        cumsum = at.cumsum(self**2)
         variance = at.zeros(at.atleast_1d(n))
-        variance = at.inc_subtensor(variance[0], value[0] ** 2)
+        variance = at.inc_subtensor(variance[0], self[0]**2)
         variance = at.inc_subtensor(variance[1:], cumsum[diag_idxs[1:]] - cumsum[diag_idxs[:-1]])
         sd_vals = at.sqrt(variance)
 
         logp_sd = pm.logp(sd_dist, sd_vals).sum()
-        corr_diag = value[diag_idxs] / sd_vals
+        corr_diag = self[diag_idxs] / sd_vals
 
         logp_lkj = (2 * eta - 3 + n - at.arange(n)) * at.log(corr_diag)
         logp_lkj = at.sum(logp_lkj)
@@ -1401,21 +1402,21 @@ class LKJCholeskyCov:
         packed_chol = _LKJCholeskyCov(name, eta=eta, n=n, sd_dist=sd_dist, **kwargs)
         if not compute_corr:
             return packed_chol
-        else:
-            chol, corr, stds = cls.helper_deterministics(n, packed_chol)
-            if store_in_trace:
-                corr = pm.Deterministic(f"{name}_corr", corr)
-                stds = pm.Deterministic(f"{name}_stds", stds)
-            return chol, corr, stds
+        chol, corr, stds = cls.helper_deterministics(n, packed_chol)
+        if store_in_trace:
+            corr = pm.Deterministic(f"{name}_corr", corr)
+            stds = pm.Deterministic(f"{name}_stds", stds)
+        return chol, corr, stds
 
     @classmethod
     def dist(cls, eta, n, sd_dist, *, compute_corr=True, **kwargs):
         # compute Cholesky decomposition
         packed_chol = _LKJCholeskyCov.dist(eta=eta, n=n, sd_dist=sd_dist, **kwargs)
-        if not compute_corr:
-            return packed_chol
-        else:
-            return cls.helper_deterministics(n, packed_chol)
+        return (
+            cls.helper_deterministics(n, packed_chol)
+            if compute_corr
+            else packed_chol
+        )
 
     @classmethod
     def helper_deterministics(cls, n, packed_chol):
@@ -1438,29 +1439,24 @@ class LKJCorrRV(RandomVariable):
 
     def make_node(self, rng, size, dtype, n, eta):
         n = at.as_tensor_variable(n)
-        if not n.ndim == 0:
+        if n.ndim != 0:
             raise ValueError("n must be a scalar (ndim=0).")
 
         eta = at.as_tensor_variable(eta)
-        if not eta.ndim == 0:
+        if eta.ndim != 0:
             raise ValueError("eta must be a scalar (ndim=0).")
 
         return super().make_node(rng, size, dtype, n, eta)
 
     def _supp_shape_from_params(self, dist_params, **kwargs):
         n = dist_params[0]
-        dist_shape = ((n * (n - 1)) // 2,)
-        return dist_shape
+        return ((n * (n - 1)) // 2,)
 
     @classmethod
     def rng_fn(cls, rng, n, eta, size):
 
         # We flatten the size to make operations easier, and then rebuild it
-        if size is None:
-            flat_size = 1
-        else:
-            flat_size = np.prod(size)
-
+        flat_size = 1 if size is None else np.prod(size)
         C = cls._random_corr_matrix(rng, n, eta, flat_size)
 
         triu_idx = np.triu_indices(n, k=1)
@@ -1489,8 +1485,7 @@ class LKJCorrRV(RandomVariable):
             z = z / np.sqrt(np.einsum("ij,ij->i", z, z))[..., np.newaxis]
             P[..., 0:mp1, mp1] = np.sqrt(y[..., np.newaxis]) * z
             P[..., mp1, mp1] = np.sqrt(1.0 - y)
-        C = np.einsum("...ji,...jk->...ik", P, P)
-        return C
+        return np.einsum("...ji,...jk->...ik", P, P)
 
 
 lkjcorr = LKJCorrRV()
@@ -1546,10 +1541,10 @@ class LKJCorr(BoundedContinuous):
         eta = at.as_tensor_variable(floatX(eta))
         return super().dist([n, eta], **kwargs)
 
-    def moment(rv, *args):
-        return at.zeros_like(rv)
+    def moment(self, *args):
+        return at.zeros_like(self)
 
-    def logp(value, n, eta):
+    def logp(self, n, eta):
         """
         Calculate log-probability of LKJ distribution at specified
         value.
@@ -1575,21 +1570,17 @@ class LKJCorr(BoundedContinuous):
         tri_index[np.triu_indices(n, k=1)] = np.arange(shape)
         tri_index[np.triu_indices(n, k=1)[::-1]] = np.arange(shape)
 
-        value = at.take(value, tri_index)
-        value = at.fill_diagonal(value, 1)
+        self = at.take(self, tri_index)
+        self = at.fill_diagonal(self, 1)
 
         # TODO: _lkj_normalizing_constant currently requires `eta` and `n` to be constants
         if not isinstance(eta, Constant):
             raise NotImplementedError("logp only implemented for constant `eta`")
         eta = float(eta.data)
         result = _lkj_normalizing_constant(eta, n)
-        result += (eta - 1.0) * at.log(det(value))
+        result += (eta - 1.0) * at.log(det(self))
         return check_parameters(
-            result,
-            value >= -1,
-            value <= 1,
-            matrix_pos_def(value),
-            eta > 0,
+            result, self >= -1, self <= 1, matrix_pos_def(self), eta > 0
         )
 
 
@@ -1741,15 +1732,15 @@ class MatrixNormal(Continuous):
             raise ValueError(
                 "Incompatible parameterization. Specify exactly one of rowcov, or rowchol."
             )
-        if rowcov is not None:
-            if rowcov.ndim != 2:
-                raise ValueError("rowcov must be two dimensional.")
-            rowchol_cov = cholesky(rowcov)
-        else:
+        if rowcov is None:
             if rowchol.ndim != 2:
                 raise ValueError("rowchol must be two dimensional.")
             rowchol_cov = at.as_tensor_variable(rowchol)
 
+        elif rowcov.ndim != 2:
+            raise ValueError("rowcov must be two dimensional.")
+        else:
+            rowchol_cov = cholesky(rowcov)
         # Among-column matrices
         if len([i for i in [colcov, colchol] if i is not None]) != 1:
             raise ValueError(
@@ -1760,11 +1751,11 @@ class MatrixNormal(Continuous):
             if colcov.ndim != 2:
                 raise ValueError("colcov must be two dimensional.")
             colchol_cov = cholesky(colcov)
-        else:
-            if colchol.ndim != 2:
-                raise ValueError("colchol must be two dimensional.")
+        elif colchol.ndim == 2:
             colchol_cov = at.as_tensor_variable(colchol)
 
+        else:
+            raise ValueError("colchol must be two dimensional.")
         dist_shape = (rowchol_cov.shape[-1], colchol_cov.shape[-1])
 
         # Broadcasting mu
@@ -1773,10 +1764,10 @@ class MatrixNormal(Continuous):
 
         return super().dist([mu, rowchol_cov, colchol_cov], **kwargs)
 
-    def moment(rv, size, mu, rowchol, colchol):
-        return at.full_like(rv, mu)
+    def moment(self, size, mu, rowchol, colchol):
+        return at.full_like(self, mu)
 
-    def logp(value, mu, rowchol, colchol):
+    def logp(self, mu, rowchol, colchol):
         """
         Calculate log-probability of Matrix-valued Normal distribution
         at specified value.
@@ -1791,12 +1782,12 @@ class MatrixNormal(Continuous):
         TensorVariable
         """
 
-        if value.ndim != 2:
+        if self.ndim != 2:
             raise ValueError("Value must be two dimensional.")
 
         # Compute Tr[colcov^-1 @ (x - mu).T @ rowcov^-1 @ (x - mu)] and
         # the logdet of colcov and rowcov.
-        delta = value - mu
+        delta = self - mu
 
         # Find exponent piece by piece
         right_quaddist = solve_lower(rowchol, delta)
@@ -1825,7 +1816,7 @@ class KroneckerNormalRV(RandomVariable):
     _print_name = ("KroneckerNormal", "\\operatorname{KroneckerNormal}")
 
     def rng_fn(self, rng, mu, sigma, *covs, size=None):
-        size = size if size else covs[-1]
+        size = size or covs[-1]
         covs = covs[:-1] if covs[-1] == size else covs
 
         cov = reduce(linalg.kron, covs)
@@ -1833,8 +1824,7 @@ class KroneckerNormalRV(RandomVariable):
         if sigma:
             cov = cov + sigma**2 * np.eye(cov.shape[0])
 
-        x = multivariate_normal.rng_fn(rng=rng, mean=mu, cov=cov, size=size)
-        return x
+        return multivariate_normal.rng_fn(rng=rng, mean=mu, cov=cov, size=size)
 
 
 kroneckernormal = KroneckerNormalRV()
@@ -1937,7 +1927,7 @@ class KroneckerNormal(Continuous):
                 "Incompatible parameterization. Specify exactly one of covs, chols, or evds."
             )
 
-        sigma = sigma if sigma else 0
+        sigma = sigma or 0
 
         if chols is not None:
             covs = [chol.dot(chol.T) for chol in chols]
@@ -1953,14 +1943,14 @@ class KroneckerNormal(Continuous):
 
         return super().dist([mu, sigma, *covs], **kwargs)
 
-    def moment(rv, size, mu, covs, chols, evds):
+    def moment(self, size, mu, covs, chols, evds):
         mean = mu
         if not rv_size_is_none(size):
             moment_size = at.concatenate([size, mu.shape])
             mean = at.full(moment_size, mu)
         return mean
 
-    def logp(value, mu, sigma, *covs):
+    def logp(self, mu, sigma, *covs):
         """
         Calculate log-probability of Multivariate Normal distribution
         with Kronecker-structured covariance at specified value.
@@ -1975,15 +1965,15 @@ class KroneckerNormal(Continuous):
         TensorVariable
         """
         # Computes the quadratic (x-mu)^T @ K^-1 @ (x-mu) and log(det(K))
-        if value.ndim > 2 or value.ndim == 0:
-            raise ValueError(f"Invalid dimension for value: {value.ndim}")
-        if value.ndim == 1:
+        if self.ndim > 2 or self.ndim == 0:
+            raise ValueError(f"Invalid dimension for value: {self.ndim}")
+        if self.ndim == 1:
             onedim = True
-            value = value[None, :]
+            self = self[None, :]
         else:
             onedim = False
 
-        delta = value - mu
+        delta = self - mu
 
         eigh_iterable = map(eigh, covs)
         eigs_sep, Qs = zip(*eigh_iterable)  # Unzip
@@ -2004,8 +1994,7 @@ class KroneckerNormal(Continuous):
         if onedim:
             quad = quad[0]
 
-        a = -(quad + logdet + N * at.log(2 * np.pi)) / 2.0
-        return a
+        return -(quad + logdet + N * at.log(2 * np.pi)) / 2.0
 
 
 class CARRV(RandomVariable):
@@ -2019,7 +2008,7 @@ class CARRV(RandomVariable):
         mu = at.as_tensor_variable(floatX(mu))
 
         W = aesara.sparse.as_sparse_or_tensor_variable(floatX(W))
-        if not W.ndim == 2:
+        if W.ndim != 2:
             raise ValueError("W must be a matrix (ndim=2).")
 
         sparse = isinstance(W, aesara.sparse.SparseVariable)
@@ -2131,10 +2120,10 @@ class CAR(Continuous):
     def dist(cls, mu, W, alpha, tau, *args, **kwargs):
         return super().dist([mu, W, alpha, tau], **kwargs)
 
-    def moment(rv, size, mu, W, alpha, tau):
-        return at.full_like(rv, mu)
+    def moment(self, size, mu, W, alpha, tau):
+        return at.full_like(self, mu)
 
-    def logp(value, mu, W, alpha, tau):
+    def logp(self, mu, W, alpha, tau):
         """
         Calculate log-probability of a CAR-distributed vector
         at specified value. This log probability function differs from
@@ -2165,18 +2154,14 @@ class CAR(Continuous):
 
         d, _ = W.shape
 
-        if value.ndim == 1:
-            value = value[None, :]
+        if self.ndim == 1:
+            self = self[None, :]
 
         logtau = d * at.log(tau).sum()
         logdet = at.log(1 - alpha.T * lam[:, None]).sum()
-        delta = value - mu
+        delta = self - mu
 
-        if sparse:
-            Wdelta = aesara.sparse.dot(delta, W)
-        else:
-            Wdelta = at.dot(delta, W)
-
+        Wdelta = aesara.sparse.dot(delta, W) if sparse else at.dot(delta, W)
         tau_dot_delta = D[None, :] * delta - alpha * Wdelta
         logquad = (tau * delta * tau_dot_delta).sum(axis=-1)
         return check_parameters(
@@ -2293,7 +2278,7 @@ class StickBreakingWeights(SimplexContinuous):
 
         return super().dist([alpha, K], **kwargs)
 
-    def moment(rv, size, alpha, K):
+    def moment(self, size, alpha, K):
         moment = (alpha / (1 + alpha)) ** at.arange(K)
         moment *= 1 / (1 + alpha)
         moment = at.concatenate([moment, [(alpha / (1 + alpha)) ** K]], axis=-1)
@@ -2310,7 +2295,7 @@ class StickBreakingWeights(SimplexContinuous):
 
         return moment
 
-    def logp(value, alpha, K):
+    def logp(self, alpha, K):
         """
         Calculate log-probability of the distribution induced from the stick-breaking process
         at specified value.
@@ -2324,32 +2309,22 @@ class StickBreakingWeights(SimplexContinuous):
         -------
         TensorVariable
         """
-        logp = -at.sum(
-            at.log(
-                at.cumsum(
-                    value[..., ::-1],
-                    axis=-1,
-                )
-            ),
-            axis=-1,
-        )
+        logp = -at.sum(at.log(at.cumsum(self[..., ::-1], axis=-1)), axis=-1)
         logp += -K * betaln(1, alpha)
-        logp += alpha * at.log(value[..., -1])
+        logp += alpha * at.log(self[..., -1])
 
         logp = at.switch(
             at.or_(
-                at.any(
-                    at.and_(at.le(value, 0), at.ge(value, 1)),
-                    axis=-1,
-                ),
+                at.any(at.and_(at.le(self, 0), at.ge(self, 1)), axis=-1),
                 at.or_(
-                    at.bitwise_not(at.allclose(value.sum(-1), 1)),
-                    at.neq(value.shape[-1], K + 1),
+                    at.bitwise_not(at.allclose(self.sum(-1), 1)),
+                    at.neq(self.shape[-1], K + 1),
                 ),
             ),
             -np.inf,
             logp,
         )
+
 
         return check_parameters(
             logp,

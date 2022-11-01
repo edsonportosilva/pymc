@@ -131,13 +131,13 @@ class Binomial(Discrete):
         p = at.as_tensor_variable(floatX(p))
         return super().dist([n, p], **kwargs)
 
-    def moment(rv, size, n, p):
+    def moment(self, size, n, p):
         mean = at.round(n * p)
         if not rv_size_is_none(size):
             mean = at.full(size, mean)
         return mean
 
-    def logp(value, n, p):
+    def logp(self, n, p):
         r"""
         Calculate log-probability of Binomial distribution at specified value.
 
@@ -153,14 +153,15 @@ class Binomial(Discrete):
         """
 
         res = at.switch(
-            at.or_(at.lt(value, 0), at.gt(value, n)),
+            at.or_(at.lt(self, 0), at.gt(self, n)),
             -np.inf,
-            binomln(n, value) + logpow(p, value) + logpow(1 - p, n - value),
+            binomln(n, self) + logpow(p, self) + logpow(1 - p, n - self),
         )
 
-        return check_parameters(res, 0 <= n, 0 <= p, p <= 1, msg="n >= 0, 0 <= p <= 1")
 
-    def logcdf(value, n, p):
+        return check_parameters(res, n >= 0, p >= 0, p <= 1, msg="n >= 0, 0 <= p <= 1")
+
+    def logcdf(self, n, p):
         """
         Compute the log of the cumulative distribution function for Binomial distribution
         at the specified value.
@@ -175,25 +176,18 @@ class Binomial(Discrete):
         -------
         TensorVariable
         """
-        value = at.floor(value)
+        self = at.floor(self)
 
         res = at.switch(
-            at.lt(value, 0),
+            at.lt(self, 0),
             -np.inf,
             at.switch(
-                at.lt(value, n),
-                at.log(at.betainc(n - value, value + 1, 1 - p)),
-                0,
+                at.lt(self, n), at.log(at.betainc(n - self, self + 1, 1 - p)), 0
             ),
         )
 
-        return check_parameters(
-            res,
-            0 <= n,
-            0 <= p,
-            p <= 1,
-            msg="n >= 0, 0 <= p <= 1",
-        )
+
+        return check_parameters(res, n >= 0, p >= 0, p <= 1, msg="n >= 0, 0 <= p <= 1")
 
 
 class BetaBinomial(Discrete):
@@ -262,13 +256,13 @@ class BetaBinomial(Discrete):
         n = at.as_tensor_variable(intX(n))
         return super().dist([n, alpha, beta], **kwargs)
 
-    def moment(rv, size, n, alpha, beta):
+    def moment(self, size, n, alpha, beta):
         mean = at.round((n * alpha) / (alpha + beta))
         if not rv_size_is_none(size):
             mean = at.full(size, mean)
         return mean
 
-    def logp(value, n, alpha, beta):
+    def logp(self, n, alpha, beta):
         r"""
         Calculate log-probability of BetaBinomial distribution at specified value.
 
@@ -283,13 +277,16 @@ class BetaBinomial(Discrete):
         TensorVariable
         """
         res = at.switch(
-            at.or_(at.lt(value, 0), at.gt(value, n)),
+            at.or_(at.lt(self, 0), at.gt(self, n)),
             -np.inf,
-            binomln(n, value) + betaln(value + alpha, n - value + beta) - betaln(alpha, beta),
+            binomln(n, self)
+            + betaln(self + alpha, n - self + beta)
+            - betaln(alpha, beta),
         )
+
         return check_parameters(res, n >= 0, alpha > 0, beta > 0, msg="n >= 0, alpha > 0, beta > 0")
 
-    def logcdf(value, n, alpha, beta):
+    def logcdf(self, n, alpha, beta):
         """
         Compute the log of the cumulative distribution function for BetaBinomial distribution
         at the specified value.
@@ -304,28 +301,32 @@ class BetaBinomial(Discrete):
         TensorVariable
         """
         # logcdf can only handle scalar values at the moment
-        if np.ndim(value):
+        if np.ndim(self):
             raise TypeError(
-                f"BetaBinomial.logcdf expects a scalar value but received a {np.ndim(value)}-dimensional object."
+                f"BetaBinomial.logcdf expects a scalar value but received a {np.ndim(self)}-dimensional object."
             )
 
-        safe_lower = at.switch(at.lt(value, 0), value, 0)
+
+        safe_lower = at.switch(at.lt(self, 0), self, 0)
         res = at.switch(
-            at.lt(value, 0),
+            at.lt(self, 0),
             -np.inf,
             at.switch(
-                at.lt(value, n),
+                at.lt(self, n),
                 at.logsumexp(
                     logp(
                         BetaBinomial.dist(alpha=alpha, beta=beta, n=n),
-                        at.arange(safe_lower, value + 1),
+                        at.arange(safe_lower, self + 1),
                     ),
                     keepdims=False,
                 ),
                 0,
             ),
         )
-        return check_parameters(res, 0 <= n, 0 < alpha, 0 < beta, msg="n >= 0, alpha > 0, beta > 0")
+
+        return check_parameters(
+            res, n >= 0, alpha > 0, beta > 0, msg="n >= 0, alpha > 0, beta > 0"
+        )
 
 
 class Bernoulli(Discrete):
@@ -388,12 +389,12 @@ class Bernoulli(Discrete):
         p = at.as_tensor_variable(floatX(p))
         return super().dist([p], **kwargs)
 
-    def moment(rv, size, p):
+    def moment(self, size, p):
         if not rv_size_is_none(size):
             p = at.full(size, p)
         return at.switch(p < 0.5, 0, 1)
 
-    def logp(value, p):
+    def logp(self, p):
         r"""
         Calculate log-probability of Bernoulli distribution at specified value.
 
@@ -409,14 +410,15 @@ class Bernoulli(Discrete):
         """
 
         res = at.switch(
-            at.or_(at.lt(value, 0), at.gt(value, 1)),
+            at.or_(at.lt(self, 0), at.gt(self, 1)),
             -np.inf,
-            at.switch(value, at.log(p), at.log1p(-p)),
+            at.switch(self, at.log(p), at.log1p(-p)),
         )
+
 
         return check_parameters(res, p >= 0, p <= 1, msg="0 <= p <= 1")
 
-    def logcdf(value, p):
+    def logcdf(self, p):
         """
         Compute the log of the cumulative distribution function for Bernoulli distribution
         at the specified value.
@@ -432,15 +434,10 @@ class Bernoulli(Discrete):
         TensorVariable
         """
         res = at.switch(
-            at.lt(value, 0),
-            -np.inf,
-            at.switch(
-                at.lt(value, 1),
-                at.log1p(-p),
-                0,
-            ),
+            at.lt(self, 0), -np.inf, at.switch(at.lt(self, 1), at.log1p(-p), 0)
         )
-        return check_parameters(res, 0 <= p, p <= 1, msg="0 <= p <= 1")
+
+        return check_parameters(res, p >= 0, p <= 1, msg="0 <= p <= 1")
 
 
 class DiscreteWeibullRV(RandomVariable):
@@ -506,13 +503,13 @@ class DiscreteWeibull(Discrete):
         beta = at.as_tensor_variable(floatX(beta))
         return super().dist([q, beta], **kwargs)
 
-    def moment(rv, size, q, beta):
+    def moment(self, size, q, beta):
         median = at.power(at.log(0.5) / at.log(q), 1 / beta) - 1
         if not rv_size_is_none(size):
             median = at.full(size, median)
         return median
 
-    def logp(value, q, beta):
+    def logp(self, q, beta):
         r"""
         Calculate log-probability of DiscreteWeibull distribution at specified value.
 
@@ -528,14 +525,18 @@ class DiscreteWeibull(Discrete):
         """
 
         res = at.switch(
-            at.lt(value, 0),
+            at.lt(self, 0),
             -np.inf,
-            at.log(at.power(q, at.power(value, beta)) - at.power(q, at.power(value + 1, beta))),
+            at.log(
+                at.power(q, at.power(self, beta))
+                - at.power(q, at.power(self + 1, beta))
+            ),
         )
 
-        return check_parameters(res, 0 < q, q < 1, 0 < beta, msg="0 < q < 1, beta > 0")
 
-    def logcdf(value, q, beta):
+        return check_parameters(res, q > 0, q < 1, beta > 0, msg="0 < q < 1, beta > 0")
+
+    def logcdf(self, q, beta):
         """
         Compute the log of the cumulative distribution function for Discrete Weibull distribution
         at the specified value.
@@ -552,11 +553,12 @@ class DiscreteWeibull(Discrete):
         """
 
         res = at.switch(
-            at.lt(value, 0),
+            at.lt(self, 0),
             -np.inf,
-            at.log1p(-at.power(q, at.power(value + 1, beta))),
+            at.log1p(-at.power(q, at.power(self + 1, beta))),
         )
-        return check_parameters(res, 0 < q, q < 1, 0 < beta, msg="0 < q < 1, beta > 0")
+
+        return check_parameters(res, q > 0, q < 1, beta > 0, msg="0 < q < 1, beta > 0")
 
 
 class Poisson(Discrete):
@@ -611,13 +613,13 @@ class Poisson(Discrete):
         mu = at.as_tensor_variable(floatX(mu))
         return super().dist([mu], *args, **kwargs)
 
-    def moment(rv, size, mu):
+    def moment(self, size, mu):
         mu = at.floor(mu)
         if not rv_size_is_none(size):
             mu = at.full(size, mu)
         return mu
 
-    def logp(value, mu):
+    def logp(self, mu):
         r"""
         Calculate log-probability of Poisson distribution at specified value.
 
@@ -632,19 +634,14 @@ class Poisson(Discrete):
         TensorVariable
         """
         logprob = at.switch(
-            at.lt(value, 0),
-            -np.inf,
-            logpow(mu, value) - factln(value) - mu,
+            at.lt(self, 0), -np.inf, logpow(mu, self) - factln(self) - mu
         )
+
         # Return zero when mu and value are both zero
-        logprob = at.switch(
-            at.eq(mu, 0) * at.eq(value, 0),
-            0,
-            logprob,
-        )
+        logprob = at.switch(at.eq(mu, 0) * at.eq(self, 0), 0, logprob)
         return check_parameters(logprob, mu >= 0, msg="mu >= 0")
 
-    def logcdf(value, mu):
+    def logcdf(self, mu):
         """
         Compute the log of the cumulative distribution function for Poisson distribution
         at the specified value.
@@ -659,18 +656,17 @@ class Poisson(Discrete):
         -------
         TensorVariable
         """
-        value = at.floor(value)
+        self = at.floor(self)
         # Avoid C-assertion when the gammaincc function is called with invalid values (#4340)
         safe_mu = at.switch(at.lt(mu, 0), 0, mu)
-        safe_value = at.switch(at.lt(value, 0), 0, value)
+        safe_value = at.switch(at.lt(self, 0), 0, self)
 
         res = at.switch(
-            at.lt(value, 0),
-            -np.inf,
-            at.log(at.gammaincc(safe_value + 1, safe_mu)),
+            at.lt(self, 0), -np.inf, at.log(at.gammaincc(safe_value + 1, safe_mu))
         )
 
-        return check_parameters(res, 0 <= mu, msg="mu >= 0")
+
+        return check_parameters(res, mu >= 0, msg="mu >= 0")
 
 
 class NegativeBinomial(Discrete):
@@ -774,13 +770,13 @@ class NegativeBinomial(Discrete):
 
         return n, p
 
-    def moment(rv, size, n, p):
+    def moment(self, size, n, p):
         mu = at.floor(n * (1 - p) / p)
         if not rv_size_is_none(size):
             mu = at.full(size, mu)
         return mu
 
-    def logp(value, n, p):
+    def logp(self, n, p):
         r"""
         Calculate log-probability of NegativeBinomial distribution at specified value.
 
@@ -798,14 +794,12 @@ class NegativeBinomial(Discrete):
         mu = alpha * (1 - p) / p
 
         res = at.switch(
-            at.lt(value, 0),
+            at.lt(self, 0),
             -np.inf,
-            (
-                binomln(value + alpha - 1, value)
-                + logpow(mu / (mu + alpha), value)
-                + logpow(alpha / (mu + alpha), alpha)
-            ),
+            (binomln(self + alpha - 1, self) + logpow(mu / (mu + alpha), self))
+            + logpow(alpha / (mu + alpha), alpha),
         )
+
 
         negbinom = check_parameters(
             res,
@@ -815,9 +809,9 @@ class NegativeBinomial(Discrete):
         )
 
         # Return Poisson when alpha gets very large.
-        return at.switch(at.gt(alpha, 1e10), logp(Poisson.dist(mu=mu), value), negbinom)
+        return at.switch(at.gt(alpha, 1e10), logp(Poisson.dist(mu=mu), self), negbinom)
 
-    def logcdf(value, n, p):
+    def logcdf(self, n, p):
         """
         Compute the log of the cumulative distribution function for NegativeBinomial distribution
         at the specified value.
@@ -833,17 +827,10 @@ class NegativeBinomial(Discrete):
         TensorVariable
         """
         res = at.switch(
-            at.lt(value, 0),
-            -np.inf,
-            at.log(at.betainc(n, at.floor(value) + 1, p)),
+            at.lt(self, 0), -np.inf, at.log(at.betainc(n, at.floor(self) + 1, p))
         )
-        return check_parameters(
-            res,
-            0 < n,
-            0 <= p,
-            p <= 1,
-            msg="0 < n, 0 <= p <= 1",
-        )
+
+        return check_parameters(res, n > 0, p >= 0, p <= 1, msg="0 < n, 0 <= p <= 1")
 
 
 class Geometric(Discrete):
@@ -892,13 +879,13 @@ class Geometric(Discrete):
         p = at.as_tensor_variable(floatX(p))
         return super().dist([p], *args, **kwargs)
 
-    def moment(rv, size, p):
+    def moment(self, size, p):
         mean = at.round(1.0 / p)
         if not rv_size_is_none(size):
             mean = at.full(size, mean)
         return mean
 
-    def logp(value, p):
+    def logp(self, p):
         r"""
         Calculate log-probability of Geometric distribution at specified value.
 
@@ -913,20 +900,11 @@ class Geometric(Discrete):
         TensorVariable
         """
 
-        res = at.switch(
-            at.lt(value, 1),
-            -np.inf,
-            at.log(p) + logpow(1 - p, value - 1),
-        )
+        res = at.switch(at.lt(self, 1), -np.inf, at.log(p) + logpow(1 - p, self - 1))
 
-        return check_parameters(
-            res,
-            0 <= p,
-            p <= 1,
-            msg="0 <= p <= 1",
-        )
+        return check_parameters(res, p >= 0, p <= 1, msg="0 <= p <= 1")
 
-    def logcdf(value, p):
+    def logcdf(self, p):
         """
         Compute the log of the cumulative distribution function for Geometric distribution
         at the specified value.
@@ -942,17 +920,8 @@ class Geometric(Discrete):
         TensorVariable
         """
 
-        res = at.switch(
-            at.lt(value, 0),
-            -np.inf,
-            at.log1mexp(at.log1p(-p) * value),
-        )
-        return check_parameters(
-            res,
-            0 <= p,
-            p <= 1,
-            msg="0 <= p <= 1",
-        )
+        res = at.switch(at.lt(self, 0), -np.inf, at.log1mexp(at.log1p(-p) * self))
+        return check_parameters(res, p >= 0, p <= 1, msg="0 <= p <= 1")
 
 
 class HyperGeometric(Discrete):
@@ -1012,14 +981,14 @@ class HyperGeometric(Discrete):
         n = at.as_tensor_variable(intX(n))
         return super().dist([good, bad, n], *args, **kwargs)
 
-    def moment(rv, size, good, bad, n):
+    def moment(self, size, good, bad, n):
         N, k = good + bad, good
         mode = at.floor((n + 1) * (k + 1) / (N + 2))
         if not rv_size_is_none(size):
             mode = at.full(size, mode)
         return mode
 
-    def logp(value, good, bad, n):
+    def logp(self, good, bad, n):
         r"""
         Calculate log-probability of HyperGeometric distribution at specified value.
 
@@ -1040,30 +1009,30 @@ class HyperGeometric(Discrete):
 
         tot = good + bad
         result = (
-            betaln(good + 1, 1)
-            + betaln(bad + 1, 1)
-            + betaln(tot - n + 1, n + 1)
-            - betaln(value + 1, good - value + 1)
-            - betaln(n - value + 1, bad - n + value + 1)
+            (
+                betaln(good + 1, 1)
+                + betaln(bad + 1, 1)
+                + betaln(tot - n + 1, n + 1)
+                - betaln(self + 1, good - self + 1)
+            )
+            - betaln(n - self + 1, bad - n + self + 1)
             - betaln(tot + 1, 1)
         )
+
         # value in [max(0, n - N + k), min(k, n)]
         lower = at.switch(at.gt(n - tot + good, 0), n - tot + good, 0)
         upper = at.switch(at.lt(good, n), good, n)
 
         res = at.switch(
-            at.lt(value, lower),
+            at.lt(self, lower),
             -np.inf,
-            at.switch(
-                at.le(value, upper),
-                result,
-                -np.inf,
-            ),
+            at.switch(at.le(self, upper), result, -np.inf),
         )
+
 
         return check_parameters(res, lower <= upper, msg="lower <= upper")
 
-    def logcdf(value, good, bad, n):
+    def logcdf(self, good, bad, n):
         """
         Compute the log of the cumulative distribution function for HyperGeometric distribution
         at the specified value.
@@ -1084,33 +1053,37 @@ class HyperGeometric(Discrete):
         TensorVariable
         """
         # logcdf can only handle scalar values at the moment
-        if np.ndim(value):
+        if np.ndim(self):
             raise TypeError(
-                f"HyperGeometric.logcdf expects a scalar value but received a {np.ndim(value)}-dimensional object."
+                f"HyperGeometric.logcdf expects a scalar value but received a {np.ndim(self)}-dimensional object."
             )
+
 
         N = good + bad
         # TODO: Use lower upper in locgdf for smarter logsumexp?
-        safe_lower = at.switch(at.lt(value, 0), value, 0)
+        safe_lower = at.switch(at.lt(self, 0), self, 0)
 
         res = at.switch(
-            at.lt(value, 0),
+            at.lt(self, 0),
             -np.inf,
             at.switch(
-                at.lt(value, n),
+                at.lt(self, n),
                 at.logsumexp(
-                    HyperGeometric.logp(at.arange(safe_lower, value + 1), good, bad, n),
+                    HyperGeometric.logp(
+                        at.arange(safe_lower, self + 1), good, bad, n
+                    ),
                     keepdims=False,
                 ),
                 0,
             ),
         )
 
+
         return check_parameters(
             res,
-            0 < N,
-            0 <= good,
-            0 <= n,
+            N > 0,
+            good >= 0,
+            n >= 0,
             good <= N,
             n <= N,
             msg="N > 0, 0 <= good <= N, 0 <= n <= N",
@@ -1180,13 +1153,13 @@ class DiscreteUniform(Discrete):
         upper = intX(at.floor(upper))
         return super().dist([lower, upper], **kwargs)
 
-    def moment(rv, size, lower, upper):
+    def moment(self, size, lower, upper):
         mode = at.maximum(at.floor((upper + lower) / 2.0), lower)
         if not rv_size_is_none(size):
             mode = at.full(size, mode)
         return mode
 
-    def logp(value, lower, upper):
+    def logp(self, lower, upper):
         r"""
         Calculate log-probability of DiscreteUniform distribution at specified value.
 
@@ -1201,13 +1174,14 @@ class DiscreteUniform(Discrete):
         TensorVariable
         """
         res = at.switch(
-            at.or_(at.lt(value, lower), at.gt(value, upper)),
+            at.or_(at.lt(self, lower), at.gt(self, upper)),
             -np.inf,
-            at.fill(value, -at.log(upper - lower + 1)),
+            at.fill(self, -at.log(upper - lower + 1)),
         )
+
         return check_parameters(res, lower <= upper, msg="lower <= upper")
 
-    def logcdf(value, lower, upper):
+    def logcdf(self, lower, upper):
         """
         Compute the log of the cumulative distribution function for Discrete uniform distribution
         at the specified value.
@@ -1224,14 +1198,16 @@ class DiscreteUniform(Discrete):
         """
 
         res = at.switch(
-            at.le(value, lower),
+            at.le(self, lower),
             -np.inf,
             at.switch(
-                at.lt(value, upper),
-                at.log(at.minimum(at.floor(value), upper) - lower + 1) - at.log(upper - lower + 1),
+                at.lt(self, upper),
+                at.log(at.minimum(at.floor(self), upper) - lower + 1)
+                - at.log(upper - lower + 1),
                 0,
             ),
         )
+
 
         return check_parameters(res, lower <= upper, msg="lower <= upper")
 
@@ -1284,7 +1260,7 @@ class Categorical(Discrete):
         if logit_p is not None:
             p = pm.math.softmax(logit_p, axis=-1)
 
-        if isinstance(p, np.ndarray) or isinstance(p, list):
+        if isinstance(p, (np.ndarray, list)):
             if (np.asarray(p) < 0).any():
                 raise ValueError(f"Negative `p` parameters are not valid, got: {p}")
             p_sum = np.sum([p], axis=-1)
@@ -1297,13 +1273,13 @@ class Categorical(Discrete):
         p = at.as_tensor_variable(floatX(p))
         return super().dist([p], **kwargs)
 
-    def moment(rv, size, p):
+    def moment(self, size, p):
         mode = at.argmax(p, axis=-1)
         if not rv_size_is_none(size):
             mode = at.full(size, mode)
         return mode
 
-    def logp(value, p):
+    def logp(self, p):
         r"""
         Calculate log-probability of Categorical distribution at specified value.
 
@@ -1316,7 +1292,7 @@ class Categorical(Discrete):
         """
         k = at.shape(p)[-1]
         p_ = p
-        value_clip = at.clip(value, 0, k - 1)
+        value_clip = at.clip(self, 0, k - 1)
 
         if p.ndim > 1:
             if p.ndim > value_clip.ndim:
@@ -1333,11 +1309,7 @@ class Categorical(Discrete):
         else:
             a = at.log(p[value_clip])
 
-        res = at.switch(
-            at.or_(at.lt(value, 0), at.gt(value, k - 1)),
-            -np.inf,
-            a,
-        )
+        res = at.switch(at.or_(at.lt(self, 0), at.gt(self, k - 1)), -np.inf, a)
 
         return check_parameters(
             res, at.all(p_ >= 0, axis=-1), at.all(p <= 1, axis=-1), msg="0 <= p <=1"
@@ -1356,9 +1328,7 @@ class DiracDeltaRV(RandomVariable):
 
     @classmethod
     def rng_fn(cls, rng, c, size=None):
-        if size is None:
-            return c.copy()
-        return np.full(size, c)
+        return c.copy() if size is None else np.full(size, c)
 
 
 diracdelta = DiracDeltaRV()
@@ -1385,12 +1355,12 @@ class DiracDelta(Discrete):
             c = floatX(c)
         return super().dist([c], **kwargs)
 
-    def moment(rv, size, c):
+    def moment(self, size, c):
         if not rv_size_is_none(size):
             c = at.full(size, c)
         return c
 
-    def logp(value, c):
+    def logp(self, c):
         r"""
         Calculate log-probability of DiracDelta distribution at specified value.
 
@@ -1404,18 +1374,10 @@ class DiracDelta(Discrete):
         -------
         TensorVariable
         """
-        return at.switch(
-            at.eq(value, c),
-            at.zeros_like(value),
-            -np.inf,
-        )
+        return at.switch(at.eq(self, c), at.zeros_like(self), -np.inf)
 
-    def logcdf(value, c):
-        return at.switch(
-            at.lt(value, c),
-            -np.inf,
-            0,
-        )
+    def logcdf(self, c):
+        return at.switch(at.lt(self, c), -np.inf, 0)
 
 
 class Constant:

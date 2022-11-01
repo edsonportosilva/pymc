@@ -54,9 +54,9 @@ class ShapeError(Exception):
     def __init__(self, message, actual=None, expected=None):
         if actual is not None and expected is not None:
             super().__init__(f"{message} (actual {actual} != expected {expected})")
-        elif actual is not None and expected is None:
+        elif actual is not None:
             super().__init__(f"{message} (actual {actual})")
-        elif actual is None and expected is not None:
+        elif expected is not None:
             super().__init__(f"{message} (expected {expected})")
         else:
             super().__init__(message)
@@ -68,9 +68,9 @@ class DtypeError(TypeError):
     def __init__(self, message, actual=None, expected=None):
         if actual is not None and expected is not None:
             super().__init__(f"{message} (actual {actual} != expected {expected})")
-        elif actual is not None and expected is None:
+        elif actual is not None:
             super().__init__(f"{message} (actual {actual})")
-        elif actual is None and expected is not None:
+        elif expected is not None:
             super().__init__(f"{message} (expected {expected})")
         else:
             super().__init__(message)
